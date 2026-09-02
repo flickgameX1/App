@@ -18,7 +18,7 @@ for stages not yet reached are empty placeholders, not half-working screens.
 | 1 | Now list view + task creation flow | **done** |
 | 2 | Focus view: steps, sprint goal, progress | **done** |
 | 3 | Active sprint + completion screen (closes the core loop) | **done** |
-| 4 | Gamification header: level ring, XP, momentum, daily quest | not started |
+| 4 | Gamification header: level ring, XP, momentum, daily quest | **done** |
 | 5 | Stats page | not started |
 | 6 | Plan calendar | not started |
 | 7 | Polish: remaining palettes, badges, animation | not started |
@@ -82,6 +82,24 @@ must not inflate its worth.
 So a short easy job is 20 XP and a long one you've been avoiding for months is
 550. Stopping a task part-way pays `total × (sprints done / sprints planned)` —
 the remainder is forfeited, the work already put in never is.
+
+## The gamification layer
+
+Sits above the task list: a level ring with the level number inside, the level's
+title, an XP bar to the next level, momentum, and the daily quest.
+
+**Every mechanic is additive.** XP and levels only climb. **Momentum** replaces
+the streak — an active day adds one, a missed day costs one, and today is never
+counted as missed because the day isn't over. Missing Tuesday costs a day, not
+the history. The **daily quest** resets nightly to a fresh target rather than
+recording a loss; hitting the target is a win, and hitting one still counts as
+showing up. There is no losable currency, no decay to zero, no broken-streak
+screen. The moment an app can punish you, opening it becomes risky and avoidance
+wins.
+
+Levels widen as they climb — 175 XP to level 2, then 225, then 275 — and each
+carries a name, because "steady builder" is something to be where "level 4" is
+only something to have.
 
 ## The sprint loop
 

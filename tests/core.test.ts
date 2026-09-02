@@ -25,6 +25,9 @@ import { sprintsNeeded, timeBucketFor, timeBucketLabel } from '../src/lib/bucket
 import { partialXp, sprintAward, taskXp } from '../src/lib/xp';
 import { focusedMinutes, focusedMs, remainingMs, sprintProgress } from '../src/lib/sprintClock';
 import { activeDaysIn, isActiveDay } from '../src/lib/consistency';
+import { LEVEL_TITLES, levelFor, levelProgress, levelTitle, xpForLevel } from '../src/lib/levels';
+import { momentumFrom, questToday } from '../src/lib/momentum';
+import { daysBetween } from '../src/lib/time';
 import { pacePlan } from '../src/lib/pace';
 import { goalFromSteps, xpPreview } from '../src/lib/goal';
 import { sortForList } from '../src/lib/ordering';
@@ -403,6 +406,52 @@ check(
   3,
 );
 check('consistency: days outside the window are ignored', activeDaysIn([mkLog('2026-01-01', { xpEarned: 50 })], week), 0);
+
+
+// --- levels: additive, never lost ----------------------------------------------
+check('levels: everyone starts at one', levelFor(0), 1);
+check('levels: 175 XP reaches level 2', levelFor(175), 2);
+check('levels: one short of it does not', levelFor(174), 1);
+check('levels: the curve widens as it climbs', [xpForLevel(2), xpForLevel(3), xpForLevel(4)], [175, 400, 675]);
+ok(
+  'levels: each level costs more than the one before',
+  xpForLevel(5) - xpForLevel(4) > xpForLevel(4) - xpForLevel(3),
+);
+check('levels: progress inside a level', levelProgress(300), { level: 2, title: 'Warming up', into: 125, span: 225, fraction: 125 / 225 });
+check('levels: a fresh account has a title too', levelProgress(0).title, 'Just started');
+check('levels: titles run out gracefully', levelTitle(99), LEVEL_TITLES[LEVEL_TITLES.length - 1]);
+ok('levels: XP only ever climbs, so a level cannot be lost', levelFor(1000) >= levelFor(999));
+
+// --- momentum: steps down by a day, never shatters ------------------------------
+const mDay = (d: number) => `2026-09-${String(d).padStart(2, '0')}`;
+const mLog = (d: number) => mkLog(mDay(d), { sprintsCompleted: 1, xpEarned: 10 });
+check('momentum: nothing logged, nothing to keep', momentumFrom([], mDay(10)), 0);
+check('momentum: one day on the board', momentumFrom([mLog(10)], mDay(10)), 1);
+check('momentum: three days running', momentumFrom([mLog(8), mLog(9), mLog(10)], mDay(10)), 3);
+check(
+  'momentum: a missed day costs a day, not the history',
+  momentumFrom([mLog(1), mLog(2), mLog(3), mLog(4), mLog(6)], mDay(6)),
+  4,
+);
+check(
+  'momentum: today is never counted as missed — the day is not over',
+  momentumFrom([mLog(8), mLog(9)], mDay(10)),
+  2,
+);
+check(
+  'momentum: a long gap wears it down gradually rather than wiping it',
+  momentumFrom([mLog(1), mLog(2), mLog(3)], mDay(6)),
+  1,
+);
+check('momentum: it floors at zero and stays there', momentumFrom([mLog(1)], mDay(20)), 0);
+check('days between: inclusive of both ends', daysBetween(mDay(1), mDay(3)), [mDay(1), mDay(2), mDay(3)]);
+check('days between: a single day is itself', daysBetween(mDay(4), mDay(4)), [mDay(4)]);
+
+// --- daily quest: resets nightly ------------------------------------------------
+const questProgress = { dailyQuestDone: 2, dailyQuestDate: mDay(9), dailyQuestTarget: 3 };
+check("quest: today's count", questToday(questProgress, mDay(9)), { done: 2, target: 3 });
+check('quest: yesterday\'s count is not today\'s', questToday(questProgress, mDay(10)), { done: 0, target: 3 });
+check('quest: no progress row yet', questToday(undefined, mDay(10)), { done: 0, target: 3 });
 
 // --- breakdown matching (carried over) ---------------------------------------
 const MATCHES: [string, string][] = [

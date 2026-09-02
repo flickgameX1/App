@@ -6,6 +6,8 @@ import { sprintsNeeded, timeBucketFor } from '../lib/buckets';
 import { sprintAward, taskXp } from '../lib/xp';
 import { focusedMinutes } from '../lib/sprintClock';
 import { activeDaysIn } from '../lib/consistency';
+import { levelFor } from '../lib/levels';
+import { momentumFrom } from '../lib/momentum';
 import { dayKey, lastNDays } from '../lib/time';
 
 export interface NewTaskInput {
@@ -107,8 +109,12 @@ async function logActivity(delta: {
   if (progress) {
     // The daily quest resets nightly, so a count from an earlier day starts over.
     const sameDay = progress.dailyQuestDate === date;
+    const totalXp = progress.totalXp + (delta.xpEarned ?? 0);
+    const allLogs = await db.statsLogs.toArray();
     await db.progress.update(1, {
-      totalXp: progress.totalXp + (delta.xpEarned ?? 0),
+      totalXp,
+      level: levelFor(totalXp),
+      momentumDays: momentumFrom(allLogs, date),
       lastActiveDate: date,
       dailyQuestDate: date,
       dailyQuestDone: (sameDay ? progress.dailyQuestDone : 0) + (delta.sprintsCompleted ?? 0),

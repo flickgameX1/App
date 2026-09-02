@@ -84,3 +84,18 @@ export function parseDuration(input: string): number | null {
 
   return null;
 }
+
+/** Every day key from `from` to `to` inclusive, oldest first. */
+export function daysBetween(from: string, to: string): string[] {
+  const [fy, fm, fd] = from.split('-').map(Number);
+  const [ty, tm, td] = to.split('-').map(Number);
+  const cursor = new Date(fy, fm - 1, fd);
+  const end = new Date(ty, tm - 1, td);
+  const out: string[] = [];
+  // A guard rather than a limit: nobody has a hundred-year streak to walk.
+  while (cursor <= end && out.length < 40_000) {
+    out.push(dayKey(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return out;
+}

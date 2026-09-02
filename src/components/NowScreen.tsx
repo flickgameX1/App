@@ -1,17 +1,24 @@
 import { useState } from 'react';
-import type { Task } from '../db/types';
+import type { Progress, Task } from '../db/types';
 import TaskRow from './TaskRow';
+import ProgressHeader from './ProgressHeader';
 import { sortForList } from '../lib/ordering';
 
 export default function NowScreen({
   tasks,
   sprintsDone,
+  progress,
+  momentum,
+  today,
   onNewTask,
   onOpen,
   onDelete,
 }: {
   tasks: Task[];
   sprintsDone: Map<number, number>;
+  progress: Progress | undefined;
+  momentum: number;
+  today: string;
   onNewTask: () => void;
   onOpen: (task: Task) => void;
   onDelete: (task: Task) => void;
@@ -35,6 +42,8 @@ export default function NowScreen({
         </div>
       </header>
 
+      <ProgressHeader progress={progress} momentum={momentum} today={today} />
+
       {sorted.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
           <p className="font-display text-lg">Nothing on the list.</p>
@@ -50,7 +59,7 @@ export default function NowScreen({
           </button>
         </div>
       ) : (
-        <ul className="mt-2 px-5">
+        <ul className="mt-4 px-5">
           {sorted.map((task) => (
             <TaskRow
               key={task.id}

@@ -21,7 +21,8 @@ import FocusView from './components/FocusView';
 import ActiveSprint from './components/ActiveSprint';
 import StopSheet from './components/StopSheet';
 import SprintDone, { type SprintResult } from './components/SprintDone';
-import { lastNDays } from './lib/time';
+import { dayKey, lastNDays } from './lib/time';
+import { momentumFrom } from './lib/momentum';
 
 type TabId = 'now' | 'plan' | 'stats';
 
@@ -52,6 +53,7 @@ export default function App() {
   );
   const statsLogs = useLiveQuery(() => db.statsLogs.toArray(), [], []);
   const running = useLiveQuery(() => db.sprints.where('status').equals('running').first(), []);
+  const progress = useLiveQuery(() => db.progress.get(1), []);
 
   useEffect(() => {
     void ensureSeeded();
@@ -72,6 +74,11 @@ export default function App() {
     const byDate = new Map(statsLogs.map((l) => [l.date, l.xpEarned]));
     return lastNDays(14).map((date) => byDate.get(date) ?? 0);
   }, [statsLogs]);
+
+  // Momentum is derived from the log rather than read from the stored counter,
+  // so days missed while the app was closed are already accounted for.
+  const today = dayKey();
+  const momentum = useMemo(() => momentumFrom(statsLogs, today), [statsLogs, today]);
 
   const openTask = tasks.find((t) => t.id === openTaskId) ?? null;
   const runningTask = running ? (tasks.find((t) => t.id === running.taskId) ?? null) : null;
@@ -172,6 +179,9 @@ export default function App() {
           <NowScreen
             tasks={tasks}
             sprintsDone={sprintsDone}
+            progress={progress}
+            momentum={momentum}
+            today={today}
             onNewTask={() => setAdding(true)}
             onOpen={(task) => setOpenTaskId(task.id ?? null)}
             onDelete={(task) => task.id && deleteTask(task.id)}

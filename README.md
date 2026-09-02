@@ -17,7 +17,7 @@ for stages not yet reached are empty placeholders, not half-working screens.
 | 0 | Scaffold: palette token system + the full Dexie data model | **done** |
 | 1 | Now list view + task creation flow | **done** |
 | 2 | Focus view: steps, sprint goal, progress | **done** |
-| 3 | Active sprint + completion screen (closes the core loop) | not started |
+| 3 | Active sprint + completion screen (closes the core loop) | **done** |
 | 4 | Gamification header: level ring, XP, momentum, daily quest | not started |
 | 5 | Stats page | not started |
 | 6 | Plan calendar | not started |
@@ -82,6 +82,31 @@ must not inflate its worth.
 So a short easy job is 20 XP and a long one you've been avoiding for months is
 550. Stopping a task part-way pays `total × (sprints done / sprints planned)` —
 the remainder is forfeited, the work already put in never is.
+
+## The sprint loop
+
+Starting a sprint hands the screen over to the timer: the ring is the hero and
+the only motion the app signs with, the task title shrinks to a whisper, the
+goal is the only content, and XP, levels and stats are all hidden for the
+duration — during a sprint there is nothing to watch instead of working.
+
+Three ways out, none of them a failure: **Goal done**, **Pause**, and **Stop
+here**, which asks only whether you're resuming later or done for now. Every
+ending lands on the payoff screen, where the XP counts up and you're asked
+whether the goal got done — "not yet" leaves the step available and costs
+nothing.
+
+A finished sprint banks its share of the task's XP; one cut short banks the
+share of that sprint actually spent focused, so showing up always pays
+something. The running total is capped at the task's own worth, and finishing
+the task pays out whatever the sprints left on the table — so the XP earned
+lands exactly on what the task was worth, and stopping early forfeits only the
+remainder.
+
+The clock reads off the wall clock, so locking the phone, backgrounding the app
+or reloading mid-sprint all leave the timer where it should be. Only one sprint
+can run at a time: one left running by another tab is closed out as stopped
+rather than orphaned, keeping the time it holds.
 
 ## Sprint goals
 

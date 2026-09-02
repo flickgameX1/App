@@ -9,10 +9,22 @@ import 'fake-indexeddb/auto';
 import { readFileSync } from 'node:fs';
 import { db } from '../src/db/db';
 import { ensureSeeded } from '../src/db/seed';
-import type { Step, Task } from '../src/db/types';
-import { createTask, deleteTask, saveSteps } from '../src/db/actions';
+import type { StatsLog, Step, Task } from '../src/db/types';
+import {
+  completeTask,
+  createTask,
+  deleteTask,
+  endSprint,
+  markGoalDone,
+  pauseSprint,
+  resumeSprint,
+  saveSteps,
+  startSprint,
+} from '../src/db/actions';
 import { sprintsNeeded, timeBucketFor, timeBucketLabel } from '../src/lib/buckets';
-import { partialXp, taskXp } from '../src/lib/xp';
+import { partialXp, sprintAward, taskXp } from '../src/lib/xp';
+import { focusedMinutes, focusedMs, remainingMs, sprintProgress } from '../src/lib/sprintClock';
+import { activeDaysIn, isActiveDay } from '../src/lib/consistency';
 import { pacePlan } from '../src/lib/pace';
 import { goalFromSteps, xpPreview } from '../src/lib/goal';
 import { sortForList } from '../src/lib/ordering';
@@ -112,7 +124,7 @@ check('steps: read back in their own order', steps.map((s) => s.text), [
 check('steps: nothing is done until the user says so', steps.every((s) => !s.done), true);
 
 // A sprint records the goal in the user's words, and which steps it came from.
-const sprintId = (await db.sprints.add({
+const schemaSprintId = (await db.sprints.add({
   taskId,
   goalText: 'write introduction',
   stepIds: [steps[0].id!, steps[2].id!],
@@ -123,7 +135,7 @@ const sprintId = (await db.sprints.add({
   pausedMs: 0,
   xpAwarded: 0,
 })) as number;
-const sprint = await db.sprints.get(sprintId);
+const sprint = await db.sprints.get(schemaSprintId);
 check('sprints: the goal is free text, kept verbatim', sprint?.goalText, 'write introduction');
 check('sprints: steps can be picked out of sequence', sprint?.stepIds?.length, 2);
 check('sprints: one running sprint is findable', (await db.sprints.where('status').equals('running').toArray()).length, 1);
@@ -292,6 +304,105 @@ check(
   await db.breakdowns.where('taskType').equals('general').count(),
   0,
 );
+
+
+// --- the sprint clock ----------------------------------------------------------
+const t0 = 1_700_000_000_000;
+const clock = (over: Partial<Parameters<typeof focusedMs>[0]> = {}) => ({
+  startedAt: t0,
+  plannedLength: 25,
+  pausedMs: 0,
+  ...over,
+});
+check('clock: paused time is not focus time', focusedMs(clock({ pausedMs: 60_000 }), t0 + 300_000), 240_000);
+check('clock: an open pause counts out as it happens', focusedMs(clock({ pausedAt: t0 + 100_000 }), t0 + 300_000), 100_000);
+check('clock: remaining counts down from planned', remainingMs(clock(), t0 + 60_000), 1_440_000);
+check('clock: remaining never goes negative', remainingMs(clock(), t0 + 60 * 60_000), 0);
+check('clock: the ring fills to one and stops', sprintProgress(clock(), t0 + 60 * 60_000), 1);
+check(
+  'clock: a sprint left open past its end is capped at what was planned',
+  focusedMinutes(clock(), t0 + 5 * 60 * 60_000),
+  25,
+);
+
+// --- what a sprint banks -------------------------------------------------------
+const award = (over: Partial<Parameters<typeof sprintAward>[0]> = {}) =>
+  sprintAward({ totalXp: 418, sprintsPlanned: 10, alreadyAwarded: 0, focusedMinutes: 25, plannedLength: 25, finished: true, ...over });
+check('award: a finished sprint banks its share', award(), 42);
+check('award: stopping half way through banks half of that', award({ finished: false, focusedMinutes: 12.5 }), 21);
+ok('award: showing up at all banks something', award({ finished: false, focusedMinutes: 2 }) > 0);
+check('award: the task is worth what it is worth, never more', award({ alreadyAwarded: 410 }), 8);
+check('award: nothing left to give once it is all paid', award({ alreadyAwarded: 418 }), 0);
+
+// --- the whole loop, through the database --------------------------------------
+const loopId = await createTask({
+  title: 'Write the loop essay',
+  priority: 'top',
+  cognitiveLoad: 'challenging',
+  estimatedMinutes: 240,
+  sprintLength: 25,
+});
+const loopTask = (await db.tasks.get(loopId))!;
+const loopSteps = await db.steps.where({ taskId: loopId }).sortBy('order');
+const planned = sprintsNeeded(loopTask.estimatedMinutes, loopTask.sprintLength);
+check('loop: the task is worth its two axes', taskXp(loopTask), 418);
+
+const loopSprintId = await startSprint(loopId, 'write the intro', [loopSteps[0].id!], 25);
+check('loop: exactly one sprint runs at a time', await db.sprints.where('status').equals('running').count(), 1);
+check(
+  'loop: a sprint left running elsewhere is closed out, not orphaned',
+  (await db.sprints.get(schemaSprintId))?.status,
+  'stopped',
+);
+await pauseSprint(loopSprintId);
+ok('loop: pausing is recorded', Boolean((await db.sprints.get(loopSprintId))?.pausedAt));
+await resumeSprint(loopSprintId);
+check('loop: resuming closes the pause', (await db.sprints.get(loopSprintId))?.pausedAt, undefined);
+ok('loop: the paused stretch is banked', (await db.sprints.get(loopSprintId))!.pausedMs >= 0);
+
+const ended = await endSprint(loopSprintId, 'completed');
+check('loop: a finished sprint pays its share', ended.xpAwarded, Math.round(418 / planned));
+check('loop: nothing is running afterwards', await db.sprints.where('status').equals('running').count(), 0);
+check('loop: ending twice does not pay twice', (await endSprint(loopSprintId, 'completed')).xpAwarded, 0);
+
+const today = dayKey();
+const todayLog = await db.statsLogs.get(today);
+check('loop: the day logs the sprint', todayLog?.sprintsCompleted, 1);
+check('loop: and the XP with it', todayLog?.xpEarned, ended.xpAwarded);
+check('loop: today counts itself in the consistency window', todayLog?.consistencyWindow, 1);
+check('loop: the running total follows', (await db.progress.get(1))?.totalXp, ended.xpAwarded);
+check('loop: the daily quest counts the sprint', (await db.progress.get(1))?.dailyQuestDone, 1);
+
+// The goal is only marked done when the user says it was.
+check('loop: steps are not ticked off behind your back', (await db.steps.get(loopSteps[0].id!))?.done, false);
+await markGoalDone(loopSprintId);
+check('loop: saying it got done ticks the steps it was for', (await db.steps.get(loopSteps[0].id!))?.done, true);
+
+// Stopping early pays for the time, and finishing trues the total up.
+const stoppedId = await startSprint(loopId, 'another go', [], 25);
+const stopped = await endSprint(stoppedId, 'stopped');
+ok('loop: stopping early is not a zero', stopped.xpAwarded >= 0);
+check('loop: a stopped sprint is not counted as completed', (await db.statsLogs.get(today))?.sprintsCompleted, 1);
+
+const remainder = await completeTask(loopId);
+const paidOut = (await db.sprints.where('taskId').equals(loopId).toArray()).reduce((n, s) => n + s.xpAwarded, 0);
+check('loop: finishing pays exactly what was left', paidOut + remainder, 418);
+check('loop: the task is done', (await db.tasks.get(loopId))?.status, 'done');
+check('loop: completing twice pays nothing extra', await completeTask(loopId), 0);
+
+// --- consistency ---------------------------------------------------------------
+const mkLog = (date: string, over: Partial<StatsLog> = {}): StatsLog => ({
+  date, tasksCompleted: 0, sprintsCompleted: 0, xpEarned: 0, consistencyWindow: 0, ...over,
+});
+const week = ['2026-08-25', '2026-08-26', '2026-08-27', '2026-08-28', '2026-08-29', '2026-08-30', '2026-08-31'];
+ok('consistency: a stopped sprint still counts as showing up', isActiveDay(mkLog('x', { xpEarned: 4 })));
+ok('consistency: an untouched day does not', !isActiveDay(mkLog('x')));
+check(
+  'consistency: a missed day costs one day, not the history',
+  activeDaysIn([mkLog(week[0], { xpEarned: 5 }), mkLog(week[2], { xpEarned: 5 }), mkLog(week[3], { xpEarned: 5 })], week),
+  3,
+);
+check('consistency: days outside the window are ignored', activeDaysIn([mkLog('2026-01-01', { xpEarned: 50 })], week), 0);
 
 // --- breakdown matching (carried over) ---------------------------------------
 const MATCHES: [string, string][] = [

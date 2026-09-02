@@ -54,3 +54,34 @@ export function partialXp(
   const share = Math.min(1, sprintsCompleted / sprintsPlanned);
   return Math.round(taskXp(task) * share);
 }
+
+/**
+ * What a sprint banks. A finished sprint is worth its share of the task; one cut
+ * short is worth the share of that sprint actually spent focused — showing up
+ * always pays something, so there is no ending worth nothing.
+ *
+ * `alreadyAwarded` caps the running total at the task's own worth: the task is
+ * worth what it is worth however many sprints it takes, and stopping early
+ * forfeits only the remainder.
+ */
+export function sprintAward({
+  totalXp,
+  sprintsPlanned,
+  alreadyAwarded,
+  focusedMinutes,
+  plannedLength,
+  finished,
+}: {
+  totalXp: number;
+  sprintsPlanned: number;
+  alreadyAwarded: number;
+  focusedMinutes: number;
+  plannedLength: number;
+  finished: boolean;
+}): number {
+  const remaining = Math.max(0, totalXp - alreadyAwarded);
+  if (remaining === 0 || sprintsPlanned <= 0) return 0;
+  const perSprint = totalXp / sprintsPlanned;
+  const share = finished ? 1 : Math.min(1, plannedLength > 0 ? focusedMinutes / plannedLength : 0);
+  return Math.min(remaining, Math.round(perSprint * share));
+}

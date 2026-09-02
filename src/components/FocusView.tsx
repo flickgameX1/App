@@ -24,6 +24,7 @@ export default function FocusView({
   recentXp,
   onBack,
   onSaveSteps,
+  onStart,
 }: {
   task: Task;
   steps: Step[];
@@ -31,6 +32,7 @@ export default function FocusView({
   recentXp: number[];
   onBack: () => void;
   onSaveSteps: (texts: string[]) => void;
+  onStart: (goalText: string, stepIds: number[]) => void;
 }) {
   const [selected, setSelected] = useState<number[]>([]);
   const [goal, setGoal] = useState('');
@@ -217,12 +219,11 @@ export default function FocusView({
       <div className="mt-6 mb-2">
         <button
           type="button"
-          disabled
-          className="w-full rounded-xl bg-accent py-4 text-base font-semibold text-bg disabled:opacity-40"
+          onClick={() => onStart(goal, selected)}
+          className="w-full rounded-xl bg-accent py-4 text-base font-semibold text-bg"
         >
           Start {task.sprintLength} min sprint
         </button>
-        <p className="mt-2 text-center text-xs text-dim">Sprints start running in stage 3.</p>
       </div>
     </div>
   );

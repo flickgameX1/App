@@ -33,6 +33,7 @@ export const PALETTE_TOKENS = [
   'p1',
   'p2',
   'p3',
+  'warn',
   'line',
 ] as const;
 

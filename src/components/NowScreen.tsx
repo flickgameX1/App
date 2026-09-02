@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Progress, Task } from '../db/types';
 import TaskRow from './TaskRow';
 import ProgressHeader from './ProgressHeader';
+import HorizonStrip from './HorizonStrip';
 import { sortForList } from '../lib/ordering';
 
 export default function NowScreen({
@@ -12,6 +13,7 @@ export default function NowScreen({
   today,
   onNewTask,
   onOpen,
+  onOpenPlan,
   onDelete,
 }: {
   tasks: Task[];
@@ -21,6 +23,7 @@ export default function NowScreen({
   today: string;
   onNewTask: () => void;
   onOpen: (task: Task) => void;
+  onOpenPlan: () => void;
   onDelete: (task: Task) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -59,6 +62,7 @@ export default function NowScreen({
           </button>
         </div>
       ) : (
+        <>
         <ul className="mt-4 px-5">
           {sorted.map((task) => (
             <TaskRow
@@ -71,6 +75,8 @@ export default function NowScreen({
             />
           ))}
         </ul>
+        <HorizonStrip tasks={tasks} onOpenPlan={onOpenPlan} onOpen={onOpen} />
+        </>
       )}
     </div>
   );

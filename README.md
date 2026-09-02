@@ -20,7 +20,7 @@ for stages not yet reached are empty placeholders, not half-working screens.
 | 3 | Active sprint + completion screen (closes the core loop) | **done** |
 | 4 | Gamification header: level ring, XP, momentum, daily quest | **done** |
 | 5 | Stats page | **done** |
-| 6 | Plan calendar | not started |
+| 6 | Plan calendar | **done** |
 | 7 | Polish: remaining palettes, badges, animation | not started |
 
 ## Running it
@@ -82,6 +82,28 @@ must not inflate its worth.
 So a short easy job is 20 XP and a long one you've been avoiding for months is
 550. Stopping a task part-way pays `total × (sprints done / sprints planned)` —
 the remainder is forfeited, the work already put in never is.
+
+## Plan
+
+A month grid as a density map with the agenda as the content. Cells carry
+priority-coloured dots, one per task due that day, so the shape of a week reads
+without processing any text; today is marked in the accent colour. Tapping a day
+fills the agenda below it. A month/week toggle sits in the header for anyone who
+finds the month grid too wide.
+
+**The pace block is the only place schedule variance appears** — and even here
+it is the target ahead, never the debt behind: "2 sprints a day hits Sep 11".
+Falling behind changes the number and turns it amber; it never produces a
+deficit count and never turns red. `warn` is its own palette token so it can be
+amber without borrowing from priority or from `reward`.
+
+### The horizon strip
+
+On the Now screen, below the list: a glanceable band of what's coming, sorted
+chronologically — priority still reads off the dot, but a top-priority task due
+in a fortnight is not what's coming next. It shows what's coming and nothing
+else. No counts, no badges, no amber, no variance of any kind; that lives in
+Plan, where the user chose to look at it.
 
 ## Stats
 

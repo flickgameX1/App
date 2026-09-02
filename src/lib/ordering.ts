@@ -14,3 +14,14 @@ export function sortForList(tasks: Task[]): Task[] {
     return a.createdAt - b.createdAt;
   });
 }
+
+/**
+ * The horizon strip is chronological, not prioritised: it answers "what is
+ * coming next", and a top-priority task due in a fortnight is not what is
+ * coming next. Priority still reads off the dot.
+ */
+export function sortByDeadline(tasks: Task[]): Task[] {
+  return [...tasks]
+    .filter((t) => t.deadline !== undefined)
+    .sort((a, b) => a.deadline! - b.deadline! || a.createdAt - b.createdAt);
+}

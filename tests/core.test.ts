@@ -29,9 +29,10 @@ import { LEVEL_TITLES, levelFor, levelProgress, levelTitle, xpForLevel } from '.
 import { momentumFrom, questToday } from '../src/lib/momentum';
 import { cumulativeXp, totals, xpByLoad, xpEarnedOn } from '../src/lib/stats';
 import { daysBetween } from '../src/lib/time';
-import { pacePlan } from '../src/lib/pace';
+import { paceFor, pacePlan } from '../src/lib/pace';
+import { addMonths, cursorFor, isInMonth, monthGrid, weekOf } from '../src/lib/calendar';
 import { goalFromSteps, xpPreview } from '../src/lib/goal';
-import { sortForList } from '../src/lib/ordering';
+import { sortByDeadline, sortForList } from '../src/lib/ordering';
 import { DEFAULT_PALETTE_ID, PALETTES, PALETTE_TOKENS, paletteById } from '../src/lib/palettes';
 import { matchTemplate } from '../src/lib/matching';
 import { dayKey, daysUntil, dueLabel, formatClock, formatDuration, lastNDays, parseDuration } from '../src/lib/time';
@@ -504,6 +505,60 @@ check(
   totals([], [statSprint({ status: 'stopped', actualLength: 12 })]).focusMinutes,
   12,
 );
+
+
+check(
+  'horizon: what is coming next is chronological, not prioritised',
+  sortByDeadline([
+    row({ title: 'top-but-later', priority: 'top', deadline: 9 * day2 }),
+    row({ title: 'undated', priority: 'top' }),
+    row({ title: 'can-wait-but-sooner', priority: 'canWait', deadline: day2 }),
+  ]).map((t: Task) => t.title),
+  ['can-wait-but-sooner', 'top-but-later'],
+);
+
+// --- calendar grid --------------------------------------------------------------
+const sept = { year: 2026, month: 8 }; // September 2026, 0-indexed
+const grid = monthGrid(sept);
+ok('calendar: whole weeks, so the grid never reflows', grid.every((w) => w.length === 7));
+check('calendar: weeks start on Monday', grid[0][0], '2026-08-31');
+check('calendar: the first of the month lands in the first row', grid[0].includes('2026-09-01'), true);
+check('calendar: the last day is covered', grid.flat().includes('2026-09-30'), true);
+ok('calendar: padding days come from the neighbouring months', !isInMonth(grid[0][0], sept));
+ok('calendar: the month itself is inside it', isInMonth('2026-09-15', sept));
+check('calendar: paging back crosses the year end', addMonths({ year: 2026, month: 0 }, -1), { year: 2025, month: 11 });
+check('calendar: paging forward too', addMonths({ year: 2026, month: 11 }, 1), { year: 2027, month: 0 });
+check('calendar: a date maps to its month', cursorFor('2026-03-09'), { year: 2026, month: 2 });
+check('calendar: the week around a Wednesday', weekOf('2026-09-02'), [
+  '2026-08-31', '2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04', '2026-09-05', '2026-09-06',
+]);
+check('calendar: a Sunday belongs to the week that started on Monday', weekOf('2026-09-06')[0], '2026-08-31');
+
+// --- pace: the target ahead, never the debt behind -------------------------------
+const paceTask = (over: Partial<Task>): Task => ({
+  title: 'Essay', type: 'essay', priority: 'top', cognitiveLoad: 'challenging',
+  estimatedMinutes: 300, timeBucket: 'long', sprintLength: 25,
+  status: 'active', createdAt: new Date(2026, 8, 1).getTime(),
+  deadline: new Date(2026, 8, 11).getTime(), ...over,
+});
+const dayOne = new Date(2026, 8, 1, 12).getTime();
+const dayEight = new Date(2026, 8, 8, 12).getTime();
+check(
+  'pace: on the day it was made',
+  paceFor(paceTask({}), 0, dayOne),
+  { done: 0, needed: 12, left: 12, daysLeft: 10, perDay: 2, behind: false },
+);
+check(
+  'pace: keeping up is not flagged',
+  paceFor(paceTask({}), 9, dayEight)?.behind,
+  false,
+);
+const slipped = paceFor(paceTask({}), 2, dayEight)!;
+check('pace: falling behind raises the target rather than counting a debt', [slipped.perDay, slipped.behind], [4, true]);
+check('pace: nothing left, nothing to plan', paceFor(paceTask({}), 12, dayEight), null);
+check('pace: no deadline, no pace', paceFor(paceTask({ deadline: undefined }), 0, dayOne), null);
+const overdue = paceFor(paceTask({}), 1, new Date(2026, 8, 14).getTime())!;
+check('pace: a passed deadline still gets a plan for today, not a deficit', [overdue.daysLeft, overdue.perDay], [1, 11]);
 
 // --- breakdown matching (carried over) ---------------------------------------
 const MATCHES: [string, string][] = [

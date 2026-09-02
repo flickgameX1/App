@@ -20,6 +20,7 @@ import NewTaskSheet from './components/NewTaskSheet';
 import FocusView from './components/FocusView';
 import ActiveSprint from './components/ActiveSprint';
 import StatsScreen from './components/StatsScreen';
+import PlanScreen from './components/PlanScreen';
 import StopSheet from './components/StopSheet';
 import SprintDone, { type SprintResult } from './components/SprintDone';
 import { dayKey, lastNDays } from './lib/time';
@@ -29,7 +30,7 @@ type TabId = 'now' | 'plan' | 'stats';
 
 const TABS: { id: TabId; label: string; waitingFor?: string }[] = [
   { id: 'now', label: 'Now' },
-  { id: 'plan', label: 'Plan', waitingFor: 'Calendar — stage 6' },
+  { id: 'plan', label: 'Plan' },
   { id: 'stats', label: 'Stats' },
 ];
 
@@ -188,7 +189,14 @@ export default function App() {
             today={today}
             onNewTask={() => setAdding(true)}
             onOpen={(task) => setOpenTaskId(task.id ?? null)}
+            onOpenPlan={() => setTab('plan')}
             onDelete={(task) => task.id && deleteTask(task.id)}
+          />
+        ) : tab === 'plan' ? (
+          <PlanScreen
+            tasks={tasks}
+            sprintsDone={sprintsDone}
+            onOpen={(task) => setOpenTaskId(task.id ?? null)}
           />
         ) : tab === 'stats' ? (
           <StatsScreen logs={statsLogs} tasks={allTasks} sprints={allSprints} progress={progress} />

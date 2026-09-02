@@ -28,6 +28,8 @@
   --pal-p1: #ff5a3c;
   --pal-p2: #ff9f45;
   --pal-p3: #4ecdc4;
+  /* Heads-up, not alarm: the pace block only. Never red, never a deficit. */
+  --pal-warn: #e9a13b;
   --pal-line: #332f3d;
 }
 
@@ -43,6 +45,8 @@
   --pal-p1: #ff3d71;
   --pal-p2: #ffd166;
   --pal-p3: #06d6a0;
+  /* Heads-up, not alarm: the pace block only. Never red, never a deficit. */
+  --pal-warn: #f0b429;
   --pal-line: #26303d;
 }
 
@@ -58,6 +62,8 @@
   --pal-p1: #e76f51;
   --pal-p2: #e9c46a;
   --pal-p3: #2a9d8f;
+  /* Heads-up, not alarm: the pace block only. Never red, never a deficit. */
+  --pal-warn: #d99a3e;
   --pal-line: #2c3733;
 }
 
@@ -76,6 +82,8 @@
   --pal-p1: #d1495b;
   --pal-p2: #b06e1f;
   --pal-p3: #3e8c84;
+  /* Heads-up, not alarm: the pace block only. Never red, never a deficit. */
+  --pal-warn: #a85e10;
   --pal-line: #dbd3c4;
 }
 
@@ -94,6 +102,7 @@
   --color-p1: var(--pal-p1);
   --color-p2: var(--pal-p2);
   --color-p3: var(--pal-p3);
+  --color-warn: var(--pal-warn);
   --color-line: var(--pal-line);
 
   /* Two clearly separate roles: a display face with character for headlines,
@@ -137,6 +146,13 @@ select {
 
 @utility pb-safe {
   padding-bottom: calc(env(safe-area-inset-bottom, 0px) + --spacing(3));
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 @utility pt-safe {

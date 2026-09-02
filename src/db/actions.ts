@@ -1,7 +1,7 @@
 import { db } from './db';
 import type { CognitiveLoad, Priority, Task } from './types';
 import { matchTemplate } from '../lib/matching';
-import { resolveStepTexts } from '../lib/breakdowns';
+import { rememberBreakdown, resolveStepTexts } from '../lib/breakdowns';
 import { timeBucketFor } from '../lib/buckets';
 
 export interface NewTaskInput {
@@ -51,4 +51,24 @@ export async function deleteTask(taskId: number): Promise<void> {
     await db.sprints.where('taskId').equals(taskId).delete();
     await db.tasks.delete(taskId);
   });
+}
+
+/**
+ * Replace a task's steps and remember them as the user's version of the task
+ * type. Order is renumbered from the list the user left behind.
+ */
+export async function saveSteps(taskId: number, texts: string[]): Promise<void> {
+  const task = await db.tasks.get(taskId);
+  if (!task) return;
+  const cleaned = texts.map((t) => t.trim()).filter(Boolean);
+  await db.transaction('rw', db.steps, async () => {
+    const existing = await db.steps.where('taskId').equals(taskId).sortBy('order');
+    // Keep the done flags of steps whose text survived the edit.
+    const doneByText = new Map(existing.filter((s) => s.done).map((s) => [s.text, true]));
+    await db.steps.where('taskId').equals(taskId).delete();
+    await db.steps.bulkAdd(
+      cleaned.map((text, order) => ({ taskId, text, order, done: doneByText.get(text) ?? false })),
+    );
+  });
+  await rememberBreakdown(task.type, cleaned);
 }

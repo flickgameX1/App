@@ -7,11 +7,13 @@ export default function NowScreen({
   tasks,
   sprintsDone,
   onNewTask,
+  onOpen,
   onDelete,
 }: {
   tasks: Task[];
   sprintsDone: Map<number, number>;
   onNewTask: () => void;
+  onOpen: (task: Task) => void;
   onDelete: (task: Task) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -55,6 +57,7 @@ export default function NowScreen({
               task={task}
               sprintsDone={sprintsDone.get(task.id!) ?? 0}
               editing={editing}
+              onOpen={() => onOpen(task)}
               onDelete={() => onDelete(task)}
             />
           ))}

@@ -16,7 +16,7 @@ for stages not yet reached are empty placeholders, not half-working screens.
 |---|---|---|
 | 0 | Scaffold: palette token system + the full Dexie data model | **done** |
 | 1 | Now list view + task creation flow | **done** |
-| 2 | Focus view: steps, sprint goal, progress | not started |
+| 2 | Focus view: steps, sprint goal, progress | **done** |
 | 3 | Active sprint + completion screen (closes the core loop) | not started |
 | 4 | Gamification header: level ring, XP, momentum, daily quest | not started |
 | 5 | Stats page | not started |
@@ -82,6 +82,15 @@ must not inflate its worth.
 So a short easy job is 20 XP and a long one you've been avoiding for months is
 550. Stopping a task part-way pays `total × (sprints done / sprints planned)` —
 the remainder is forfeited, the work already put in never is.
+
+## Sprint goals
+
+The app never walks you through a checklist. In the focus view the breakdown is
+a set of **options**: tap any of them, in any order, and the picked steps become
+the sprint's goal — a single line of free text you can rewrite entirely. Picking
+more steps takes the goal back over; typing your own keeps it until you do.
+Nothing is locked behind finishing an earlier step, because the piece you can
+actually face right now often isn't the next one in sequence.
 
 ## The breakdown system
 

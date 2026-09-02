@@ -9,11 +9,12 @@ import 'fake-indexeddb/auto';
 import { readFileSync } from 'node:fs';
 import { db } from '../src/db/db';
 import { ensureSeeded } from '../src/db/seed';
-import type { Task } from '../src/db/types';
-import { createTask, deleteTask } from '../src/db/actions';
+import type { Step, Task } from '../src/db/types';
+import { createTask, deleteTask, saveSteps } from '../src/db/actions';
 import { sprintsNeeded, timeBucketFor, timeBucketLabel } from '../src/lib/buckets';
 import { partialXp, taskXp } from '../src/lib/xp';
 import { pacePlan } from '../src/lib/pace';
+import { goalFromSteps, xpPreview } from '../src/lib/goal';
 import { sortForList } from '../src/lib/ordering';
 import { DEFAULT_PALETTE_ID, PALETTES, PALETTE_TOKENS, paletteById } from '../src/lib/palettes';
 import { matchTemplate } from '../src/lib/matching';
@@ -231,6 +232,65 @@ check(
   'list: a dated task outranks an undated one at the same priority',
   sortForList([row({ title: 'undated' }), row({ title: 'dated', deadline: day2 })]).map((t: Task) => t.title),
   ['dated', 'undated'],
+);
+
+
+// --- sprint goals: picked in any order, always editable ------------------------
+const goalSteps: Step[] = [
+  { id: 10, taskId: 1, text: 'Open the doc', done: false, order: 0 },
+  { id: 11, taskId: 1, text: 'Write the intro', done: false, order: 1 },
+  { id: 12, taskId: 1, text: 'Check the references', done: false, order: 2 },
+];
+check('goal: one step', goalFromSteps(goalSteps, [11]), 'Write the intro');
+check('goal: several steps join up', goalFromSteps(goalSteps, [10, 12]), 'Open the doc + Check the references');
+check(
+  'goal: tap order does not matter, step order does',
+  goalFromSteps(goalSteps, [12, 10]),
+  'Open the doc + Check the references',
+);
+check('goal: nothing picked, nothing suggested', goalFromSteps(goalSteps, []), '');
+check('goal: an id that is no longer there is ignored', goalFromSteps(goalSteps, [99]), '');
+
+// --- XP preview ----------------------------------------------------------------
+check('preview: a fresh task', xpPreview(418, 10, 0), { perSprint: 42, earned: 0, remaining: 418 });
+check('preview: part way through', xpPreview(418, 10, 4), { perSprint: 42, earned: 167, remaining: 251 });
+check('preview: every sprint done leaves nothing on the table', xpPreview(418, 10, 10), { perSprint: 42, earned: 418, remaining: 0 });
+check('preview: overrunning the plan cannot go negative', xpPreview(418, 10, 14), { perSprint: 42, earned: 418, remaining: 0 });
+
+// --- editing a breakdown teaches the task type ---------------------------------
+const editId = await createTask({
+  title: 'clean the kitchen',
+  priority: 'second',
+  cognitiveLoad: 'easy',
+  estimatedMinutes: 30,
+  sprintLength: 15,
+});
+const before = await db.steps.where({ taskId: editId }).sortBy('order');
+await db.steps.update(before[0].id!, { done: true });
+await saveSteps(editId, [before[0].text, 'Wipe the hob', 'Take the recycling out']);
+const after = await db.steps.where({ taskId: editId }).sortBy('order');
+check('edit: the new list replaces the old', after.map((s) => s.text), [before[0].text, 'Wipe the hob', 'Take the recycling out']);
+check('edit: order is renumbered from the list left behind', after.map((s) => s.order), [0, 1, 2]);
+check('edit: a step already done stays done', after[0].done, true);
+check(
+  'edit: the type remembers the edit for next time',
+  (await db.breakdowns.where('taskType').equals('dishes').first())?.steps,
+  [before[0].text, 'Wipe the hob', 'Take the recycling out'],
+);
+
+// The generic fallback is not a task type, so edits there teach nothing.
+const looseId = await createTask({
+  title: 'water the plants',
+  priority: 'canWait',
+  cognitiveLoad: 'easy',
+  estimatedMinutes: 10,
+  sprintLength: 10,
+});
+await saveSteps(looseId, ['Fill the watering can']);
+check(
+  'edit: an unmatched task does not rewrite the default for every other one',
+  await db.breakdowns.where('taskType').equals('general').count(),
+  0,
 );
 
 // --- breakdown matching (carried over) ---------------------------------------

@@ -7,32 +7,40 @@ import { dueLabel } from '../lib/time';
 
 /**
  * A row, not a card. The coloured bar is the scanning signal; everything else is
- * detail you read once you've landed. Tapping a row opens the focus view — that
- * arrives in stage 2, so rows are inert for now.
+ * detail you read once you've landed. Tapping one opens the focus view.
  */
 export default function TaskRow({
   task,
   sprintsDone,
   editing,
+  onOpen,
   onDelete,
 }: {
   task: Task;
   sprintsDone: number;
   editing: boolean;
+  onOpen: () => void;
   onDelete: () => void;
 }) {
   const priority = PRIORITY_META[task.priority];
   const planned = sprintsNeeded(task.estimatedMinutes, task.sprintLength);
 
   return (
-    <li className="relative border-b border-line/70 py-4 pl-4 last:border-0">
+    <li className="relative border-b border-line/70 last:border-0">
       <span
         aria-hidden="true"
         className={`absolute top-3 bottom-3 left-0 w-[3px] rounded-full ${priority.bar}`}
       />
 
+      <div className="py-4 pl-4">
       <div className="flex items-start justify-between gap-3">
-        <h3 className="font-display text-[17px] leading-snug font-semibold">{task.title}</h3>
+        <button
+          type="button"
+          onClick={onOpen}
+          className="text-left font-display text-[17px] leading-snug font-semibold"
+        >
+          {task.title}
+        </button>
         {editing ? (
           <button
             type="button"
@@ -60,6 +68,7 @@ export default function TaskRow({
         {sprintsDone} of {planned} {planned === 1 ? 'sprint' : 'sprints'}
         {task.deadline ? ` · due ${dueLabel(task.deadline)}` : ''}
       </p>
+      </div>
     </li>
   );
 }

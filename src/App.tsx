@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db/db';
 import { ensureSeeded } from './db/seed';
-import { createTask, deleteTask, type NewTaskInput } from './db/actions';
+import { createTask, deleteTask, saveSteps, type NewTaskInput } from './db/actions';
 import { usePalette } from './lib/usePalette';
 import NowScreen from './components/NowScreen';
 import NewTaskSheet from './components/NewTaskSheet';
+import FocusView from './components/FocusView';
+import { lastNDays } from './lib/time';
 
 type TabId = 'now' | 'plan' | 'stats';
 
@@ -18,6 +20,7 @@ const TABS: { id: TabId; label: string; waitingFor?: string }[] = [
 export default function App() {
   const [tab, setTab] = useState<TabId>('now');
   const [adding, setAdding] = useState(false);
+  const [openTaskId, setOpenTaskId] = useState<number | null>(null);
 
   const settings = useLiveQuery(() => db.settings.get(1));
   const tasks = useLiveQuery(() => db.tasks.where('status').equals('active').toArray(), [], []);
@@ -26,6 +29,12 @@ export default function App() {
     [],
     [],
   );
+  const openSteps = useLiveQuery(
+    () => (openTaskId === null ? [] : db.steps.where('taskId').equals(openTaskId).sortBy('order')),
+    [openTaskId],
+    [],
+  );
+  const statsLogs = useLiveQuery(() => db.statsLogs.toArray(), [], []);
 
   useEffect(() => {
     void ensureSeeded();
@@ -41,7 +50,30 @@ export default function App() {
     return counts;
   }, [completedSprints]);
 
+  /** Daily XP for the focus view's sparkline. Empty days are real zeroes. */
+  const recentXp = useMemo(() => {
+    const byDate = new Map(statsLogs.map((l) => [l.date, l.xpEarned]));
+    return lastNDays(14).map((date) => byDate.get(date) ?? 0);
+  }, [statsLogs]);
+
+  const openTask = tasks.find((t) => t.id === openTaskId) ?? null;
   const placeholder = TABS.find((t) => t.id === tab)?.waitingFor;
+
+  // The focus view takes the whole screen: no list, no tabs, nothing else.
+  if (openTask) {
+    return (
+      <div className="mx-auto h-full max-w-md">
+        <FocusView
+          task={openTask}
+          steps={openSteps}
+          sprintsDone={sprintsDone.get(openTask.id!) ?? 0}
+          recentXp={recentXp}
+          onBack={() => setOpenTaskId(null)}
+          onSaveSteps={(texts) => void saveSteps(openTask.id!, texts)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto flex h-full max-w-md flex-col">
@@ -51,6 +83,7 @@ export default function App() {
             tasks={tasks}
             sprintsDone={sprintsDone}
             onNewTask={() => setAdding(true)}
+            onOpen={(task) => setOpenTaskId(task.id ?? null)}
             onDelete={(task) => task.id && deleteTask(task.id)}
           />
         ) : (

@@ -9,8 +9,8 @@ login, no backend, works offline, installs to the home screen.
 
 ## Build status
 
-Built in stages; each stage lands and is confirmed before the next starts. Tabs
-for stages not yet reached are empty placeholders, not half-working screens.
+Built in stages; each stage landed and was confirmed before the next started.
+All seven are in.
 
 | Stage | Scope | State |
 |---|---|---|
@@ -21,7 +21,7 @@ for stages not yet reached are empty placeholders, not half-working screens.
 | 4 | Gamification header: level ring, XP, momentum, daily quest | **done** |
 | 5 | Stats page | **done** |
 | 6 | Plan calendar | **done** |
-| 7 | Polish: remaining palettes, badges, animation | not started |
+| 7 | Polish: palette switcher, milestone badges, animation | **done** |
 
 ## Running it
 
@@ -43,7 +43,15 @@ element from `Settings.activePaletteId` — so a theme change is one attribute.
 
 Each palette defines `bg`, `surface`, `text`, `muted`, `dim`, `accent`, `reward`,
 `p1`/`p2`/`p3` and `line`. Four ship: **Ember** (default), **Neon**, **Forest**,
-and **Paper**, a light theme for light-sensitivity.
+and **Paper**, a light theme for light-sensitivity — switchable from the Now
+screen, and the choice persists.
+
+The theme block is `@theme inline`, which matters: without it Tailwind emits the
+`--color-*` variables on `:root`, where each `var()` resolves once and then
+inherits as a concrete colour — so a subtree stamped with its own
+`[data-palette]` would still paint the root's colours. Inlined, every utility
+resolves the palette variable at the element using it, which is what makes the
+theme picker's live swatches possible.
 
 `reward` is reserved for XP and levels and is never used decoratively. Priority
 owns the row colour (`p1`/`p2`/`p3`); cognitive load stays a neutral text chip,
@@ -140,6 +148,16 @@ wins.
 Levels widen as they climb — 175 XP to level 2, then 225, then 275 — and each
 carries a name, because "steady builder" is something to be where "level 4" is
 only something to have.
+
+**Milestone badges** mark things that actually happened — a first finished task,
+a task you'd marked impossible, ten sprints, a three-hour haul. They are
+appended and permanent: a snapshot that no longer qualifies never takes one
+back. Newly earned ones are named in the payoff screen, where the reward moment
+already is, and the full set lives on Stats.
+
+**Motion**: exactly two moments — the sprint ring filling and the XP counting up
+on completion. There is one CSS transition in the whole app, and the count-up
+respects `prefers-reduced-motion`. Everything else stays still.
 
 ## The sprint loop
 

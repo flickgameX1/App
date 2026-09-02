@@ -40,13 +40,13 @@ export default function HorizonStrip({
             <button
               type="button"
               onClick={() => onOpen(task)}
-              className="flex h-[72px] w-36 flex-col justify-between rounded-xl border border-line bg-surface p-3 text-left"
+              className="flex h-[84px] w-36 flex-col justify-between gap-1 rounded-xl border border-line bg-surface p-3 text-left"
             >
               <span className="flex items-center gap-1.5 text-[11px] text-dim">
                 <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${PRIORITY_META[task.priority].dot}`} />
                 {dueLabel(task.deadline!)}
               </span>
-              <span className="line-clamp-2 text-sm leading-snug">{task.title}</span>
+              <span className="line-clamp-2 text-sm leading-tight">{task.title}</span>
             </button>
           </li>
         ))}

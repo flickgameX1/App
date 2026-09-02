@@ -8,6 +8,7 @@ import { focusedMinutes } from '../lib/sprintClock';
 import { activeDaysIn } from '../lib/consistency';
 import { levelFor } from '../lib/levels';
 import { momentumFrom } from '../lib/momentum';
+import { newlyEarned, type BadgeSnapshot } from '../lib/badges';
 import { dayKey, lastNDays } from '../lib/time';
 
 export interface NewTaskInput {
@@ -89,7 +90,7 @@ async function logActivity(delta: {
   sprintsCompleted?: number;
   tasksCompleted?: number;
   xpEarned?: number;
-}): Promise<void> {
+}): Promise<string[]> {
   const date = dayKey();
   const existing = await db.statsLogs.get(date);
   await db.statsLogs.put({
@@ -119,7 +120,39 @@ async function logActivity(delta: {
       dailyQuestDate: date,
       dailyQuestDone: (sameDay ? progress.dailyQuestDone : 0) + (delta.sprintsCompleted ?? 0),
     });
+    return settleBadges();
   }
+  return [];
+}
+
+/**
+ * Badges are appended, never recalculated away: a snapshot that no longer earns
+ * one leaves the badge exactly where it is.
+ */
+async function settleBadges(): Promise<string[]> {
+  const progress = await db.progress.get(1);
+  if (!progress) return [];
+
+  const [tasks, sprints, logs] = await Promise.all([
+    db.tasks.toArray(),
+    db.sprints.toArray(),
+    db.statsLogs.toArray(),
+  ]);
+  const done = tasks.filter((t) => t.status === 'done');
+  const snapshot: BadgeSnapshot = {
+    tasksCompleted: done.length,
+    sprintsCompleted: sprints.filter((s) => s.status === 'completed').length,
+    level: levelFor(progress.totalXp),
+    momentum: momentumFrom(logs, dayKey()),
+    longTasksCompleted: done.filter((t) => t.timeBucket === 'long').length,
+    impossibleTasksCompleted: done.filter((t) => t.cognitiveLoad === 'impossible').length,
+  };
+
+  const fresh = newlyEarned(snapshot, progress.badgesEarned);
+  if (fresh.length) {
+    await db.progress.update(1, { badgesEarned: [...progress.badgesEarned, ...fresh] });
+  }
+  return fresh;
 }
 
 export async function startSprint(
@@ -167,6 +200,7 @@ export async function resumeSprint(sprintId: number): Promise<void> {
 export interface SprintOutcome {
   xpAwarded: number;
   focusedMinutes: number;
+  newBadges: string[];
 }
 
 /**
@@ -179,12 +213,12 @@ export async function endSprint(
   status: Exclude<SprintStatus, 'running'>,
 ): Promise<SprintOutcome> {
   const sprint = await db.sprints.get(sprintId);
-  if (!sprint || sprint.status !== 'running') return { xpAwarded: 0, focusedMinutes: 0 };
+  if (!sprint || sprint.status !== 'running') return { xpAwarded: 0, focusedMinutes: 0, newBadges: [] };
 
   const endedAt = Date.now();
   const minutes = focusedMinutes({ ...sprint, endedAt }, endedAt);
   const task = await db.tasks.get(sprint.taskId);
-  if (!task) return { xpAwarded: 0, focusedMinutes: minutes };
+  if (!task) return { xpAwarded: 0, focusedMinutes: minutes, newBadges: [] };
 
   const siblings = await db.sprints.where('taskId').equals(sprint.taskId).toArray();
   const alreadyAwarded = siblings.reduce((sum, s) => sum + (s.id === sprintId ? 0 : s.xpAwarded), 0);
@@ -205,9 +239,12 @@ export async function endSprint(
     xpAwarded,
     pausedAt: undefined,
   });
-  await logActivity({ sprintsCompleted: status === 'completed' ? 1 : 0, xpEarned: xpAwarded });
+  const newBadges = await logActivity({
+    sprintsCompleted: status === 'completed' ? 1 : 0,
+    xpEarned: xpAwarded,
+  });
 
-  return { xpAwarded, focusedMinutes: minutes };
+  return { xpAwarded, focusedMinutes: minutes, newBadges };
 }
 
 /** Marks the steps a sprint was for as done. Only ever called when asked to. */
@@ -221,14 +258,24 @@ export async function markGoalDone(sprintId: number): Promise<void> {
  * Finishing the task pays out whatever the sprints left on the table, so the
  * total earned always lands exactly on what the task was worth.
  */
-export async function completeTask(taskId: number): Promise<number> {
+export interface TaskOutcome {
+  xpAwarded: number;
+  newBadges: string[];
+}
+
+export async function completeTask(taskId: number): Promise<TaskOutcome> {
   const task = await db.tasks.get(taskId);
-  if (!task || task.status === 'done') return 0;
+  if (!task || task.status === 'done') return { xpAwarded: 0, newBadges: [] };
   const sprints = await db.sprints.where('taskId').equals(taskId).toArray();
   const awarded = sprints.reduce((sum, s) => sum + s.xpAwarded, 0);
   const remainder = Math.max(0, taskXp(task) - awarded);
 
   await db.tasks.update(taskId, { status: 'done', completedAt: Date.now() });
-  await logActivity({ tasksCompleted: 1, xpEarned: remainder });
-  return remainder;
+  const newBadges = await logActivity({ tasksCompleted: 1, xpEarned: remainder });
+  return { xpAwarded: remainder, newBadges };
+}
+
+/** The active palette. Every colour in the UI follows from this one row. */
+export async function setPalette(paletteId: string): Promise<void> {
+  await db.settings.update(1, { activePaletteId: paletteId });
 }

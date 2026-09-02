@@ -1,8 +1,11 @@
 import { useState } from 'react';
 import { useCountUp } from '../lib/useCountUp';
 import { formatDuration } from '../lib/time';
+import { badgeById } from '../lib/badges';
 
 export interface SprintResult {
+  /** Set when the payoff is for finishing the whole task, not one sprint. */
+  taskFinished?: boolean;
   sprintId: number;
   status: 'completed' | 'paused' | 'stopped';
   xpAwarded: number;
@@ -11,6 +14,7 @@ export interface SprintResult {
   /** True when the sprint ended by the user calling the goal done. */
   goalAlreadyDone: boolean;
   hasSteps: boolean;
+  newBadges: string[];
 }
 
 /**
@@ -37,8 +41,13 @@ export default function SprintDone({
   const [answered, setAnswered] = useState(result.goalAlreadyDone);
   const xp = useCountUp(result.xpAwarded);
 
-  const heading =
-    result.status === 'completed' ? 'Sprint done' : result.status === 'paused' ? 'Paused there' : 'Stopped there';
+  const heading = result.taskFinished
+    ? 'Task done'
+    : result.status === 'completed'
+      ? 'Sprint done'
+      : result.status === 'paused'
+        ? 'Paused there'
+        : 'Stopped there';
 
   return (
     <div className="flex h-full flex-col justify-between px-6 pt-safe pb-safe">
@@ -46,8 +55,18 @@ export default function SprintDone({
         <h1 className="font-display text-2xl font-semibold">{heading}</h1>
         <p className="mt-6 font-display text-6xl font-semibold text-reward tabular-nums">+{xp}</p>
         <p className="mt-1 text-sm text-muted">
-          XP · {formatDuration(result.focusedMinutes)} focused
+          XP{result.taskFinished ? '' : ` · ${formatDuration(result.focusedMinutes)} focused`}
         </p>
+
+        {result.newBadges.length > 0 && (
+          <ul className="mt-4 space-y-1">
+            {result.newBadges.map((id) => (
+              <li key={id} className="text-sm text-reward">
+                Milestone · {badgeById(id)?.name ?? id}
+              </li>
+            ))}
+          </ul>
+        )}
 
         {result.hasSteps && !answered && (
           <div className="mt-10 w-full">
@@ -77,31 +96,41 @@ export default function SprintDone({
         )}
       </div>
 
-      <div className="space-y-3">
+      {result.taskFinished ? (
         <button
           type="button"
-          onClick={onAnother}
-          className="w-full rounded-xl bg-accent py-4 text-base font-semibold text-bg"
+          onClick={onBack}
+          className="w-full rounded-xl bg-accent py-4 text-base font-semibold text-bg active:opacity-85"
         >
-          Another sprint
+          Back to the list
         </button>
-        <div className="flex gap-3">
+      ) : (
+        <div className="space-y-3">
           <button
             type="button"
-            onClick={onTaskComplete}
-            className="flex-1 rounded-xl border border-line py-3.5 text-base"
+            onClick={onAnother}
+            className="w-full rounded-xl bg-accent py-4 text-base font-semibold text-bg active:opacity-85"
           >
-            Task complete
+            Another sprint
           </button>
-          <button
-            type="button"
-            onClick={onBack}
-            className="flex-1 rounded-xl border border-line py-3.5 text-base text-muted"
-          >
-            That's it for now
-          </button>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onTaskComplete}
+              className="flex-1 rounded-xl border border-line py-3.5 text-base"
+            >
+              Task complete
+            </button>
+            <button
+              type="button"
+              onClick={onBack}
+              className="flex-1 rounded-xl border border-line py-3.5 text-base text-muted"
+            >
+              That's it for now
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -220,7 +220,7 @@ export default function FocusView({
         <button
           type="button"
           onClick={() => onStart(goal, selected)}
-          className="w-full rounded-xl bg-accent py-4 text-base font-semibold text-bg"
+          className="w-full rounded-xl bg-accent py-4 text-base font-semibold text-bg active:opacity-85"
         >
           Start {task.sprintLength} min sprint
         </button>

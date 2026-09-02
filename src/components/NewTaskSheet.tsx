@@ -217,7 +217,7 @@ export default function NewTaskSheet({
         <button
           type="submit"
           disabled={!ready}
-          className="mt-5 w-full rounded-xl bg-accent py-4 text-base font-semibold text-bg disabled:opacity-40"
+          className="mt-5 w-full rounded-xl bg-accent py-4 text-base font-semibold text-bg active:opacity-85 disabled:opacity-40"
         >
           Add task
         </button>

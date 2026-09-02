@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Progress, Sprint, StatsLog, Task } from '../db/types';
 import GrowthChart from './charts/GrowthChart';
 import LoadBars from './charts/LoadBars';
+import BadgeList from './BadgeList';
 import { cumulativeXp, totals, xpByLoad } from '../lib/stats';
 import { activeDaysIn, isActiveDay } from '../lib/consistency';
 import { levelProgress } from '../lib/levels';
@@ -95,6 +96,14 @@ export default function StatsScreen({
         </h2>
         <p className="mb-3 text-xs text-dim">Across every task, finished or not</p>
         <LoadBars slices={slices} />
+      </section>
+
+      <section className="mt-8 px-5" aria-labelledby="badges-heading">
+        <h2 id="badges-heading" className="text-sm text-muted">
+          Milestones
+        </h2>
+        <p className="mb-3 text-xs text-dim">Earned for good, once earned</p>
+        <BadgeList earned={progress?.badgesEarned ?? []} />
       </section>
 
       <div className="mt-8 px-5">

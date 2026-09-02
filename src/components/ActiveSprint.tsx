@@ -93,7 +93,7 @@ export default function ActiveSprint({
         <button
           type="button"
           onClick={onGoalDone}
-          className="w-full rounded-xl bg-accent py-4 text-base font-semibold text-bg"
+          className="w-full rounded-xl bg-accent py-4 text-base font-semibold text-bg active:opacity-85"
         >
           Goal done
         </button>

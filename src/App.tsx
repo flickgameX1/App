@@ -11,16 +11,19 @@ import {
   pauseSprint,
   resumeSprint,
   saveSteps,
+  setPalette,
   startSprint,
   type NewTaskInput,
 } from './db/actions';
 import { usePalette } from './lib/usePalette';
+import { DEFAULT_PALETTE_ID } from './lib/palettes';
 import NowScreen from './components/NowScreen';
 import NewTaskSheet from './components/NewTaskSheet';
 import FocusView from './components/FocusView';
 import ActiveSprint from './components/ActiveSprint';
 import StatsScreen from './components/StatsScreen';
 import PlanScreen from './components/PlanScreen';
+import PaletteSheet from './components/PaletteSheet';
 import StopSheet from './components/StopSheet';
 import SprintDone, { type SprintResult } from './components/SprintDone';
 import { dayKey, lastNDays } from './lib/time';
@@ -39,6 +42,7 @@ export default function App() {
   const [adding, setAdding] = useState(false);
   const [openTaskId, setOpenTaskId] = useState<number | null>(null);
   const [stopping, setStopping] = useState(false);
+  const [themeOpen, setThemeOpen] = useState(false);
   const [result, setResult] = useState<SprintResult | null>(null);
 
   const settings = useLiveQuery(() => db.settings.get(1));
@@ -102,6 +106,7 @@ export default function App() {
       goalText: running.goalText,
       goalAlreadyDone,
       hasSteps: steps > 0 && (running.stepIds?.length ?? 0) > 0,
+      newBadges: outcome.newBadges,
     });
     setOpenTaskId(running.taskId);
   };
@@ -119,9 +124,25 @@ export default function App() {
             if (task?.id) await startSprint(task.id, result.goalText, [], task.sprintLength);
           }}
           onTaskComplete={async () => {
-            if (openTaskId !== null) await completeTask(openTaskId);
-            setResult(null);
+            if (openTaskId === null) {
+              setResult(null);
+              return;
+            }
+            // Finishing the task pays the remainder and can earn milestones —
+            // both belong in the reward moment, not discovered later on Stats.
+            const outcome = await completeTask(openTaskId);
             setOpenTaskId(null);
+            setResult({
+              taskFinished: true,
+              sprintId: result.sprintId,
+              status: 'completed',
+              xpAwarded: outcome.xpAwarded,
+              focusedMinutes: 0,
+              goalText: '',
+              goalAlreadyDone: true,
+              hasSteps: false,
+              newBadges: outcome.newBadges,
+            });
           }}
           onBack={() => setResult(null)}
         />
@@ -190,6 +211,7 @@ export default function App() {
             onNewTask={() => setAdding(true)}
             onOpen={(task) => setOpenTaskId(task.id ?? null)}
             onOpenPlan={() => setTab('plan')}
+            onOpenTheme={() => setThemeOpen(true)}
             onDelete={(task) => task.id && deleteTask(task.id)}
           />
         ) : tab === 'plan' ? (
@@ -239,6 +261,12 @@ export default function App() {
         </ul>
       </nav>
 
+      <PaletteSheet
+        open={themeOpen}
+        active={settings?.activePaletteId ?? DEFAULT_PALETTE_ID}
+        onClose={() => setThemeOpen(false)}
+        onChoose={(id) => void setPalette(id)}
+      />
       <NewTaskSheet
         open={adding}
         onClose={() => setAdding(false)}

@@ -28,6 +28,7 @@ import { activeDaysIn, isActiveDay } from '../src/lib/consistency';
 import { LEVEL_TITLES, levelFor, levelProgress, levelTitle, xpForLevel } from '../src/lib/levels';
 import { momentumFrom, questToday } from '../src/lib/momentum';
 import { cumulativeXp, totals, xpByLoad, xpEarnedOn } from '../src/lib/stats';
+import { BADGES, badgeById, newlyEarned, type BadgeSnapshot } from '../src/lib/badges';
 import { daysBetween } from '../src/lib/time';
 import { paceFor, pacePlan } from '../src/lib/pace';
 import { addMonths, cursorFor, isInMonth, monthGrid, weekOf } from '../src/lib/calendar';
@@ -389,11 +390,11 @@ const stopped = await endSprint(stoppedId, 'stopped');
 ok('loop: stopping early is not a zero', stopped.xpAwarded >= 0);
 check('loop: a stopped sprint is not counted as completed', (await db.statsLogs.get(today))?.sprintsCompleted, 1);
 
-const remainder = await completeTask(loopId);
+const remainder = (await completeTask(loopId)).xpAwarded;
 const paidOut = (await db.sprints.where('taskId').equals(loopId).toArray()).reduce((n, s) => n + s.xpAwarded, 0);
 check('loop: finishing pays exactly what was left', paidOut + remainder, 418);
 check('loop: the task is done', (await db.tasks.get(loopId))?.status, 'done');
-check('loop: completing twice pays nothing extra', await completeTask(loopId), 0);
+check('loop: completing twice pays nothing extra', (await completeTask(loopId)).xpAwarded, 0);
 
 // --- consistency ---------------------------------------------------------------
 const mkLog = (date: string, over: Partial<StatsLog> = {}): StatsLog => ({
@@ -559,6 +560,36 @@ check('pace: nothing left, nothing to plan', paceFor(paceTask({}), 12, dayEight)
 check('pace: no deadline, no pace', paceFor(paceTask({ deadline: undefined }), 0, dayOne), null);
 const overdue = paceFor(paceTask({}), 1, new Date(2026, 8, 14).getTime())!;
 check('pace: a passed deadline still gets a plan for today, not a deficit', [overdue.daysLeft, overdue.perDay], [1, 11]);
+
+
+// --- badges: additive and permanent ---------------------------------------------
+const snap = (over: Partial<BadgeSnapshot> = {}): BadgeSnapshot => ({
+  tasksCompleted: 0, sprintsCompleted: 0, level: 1, momentum: 0,
+  longTasksCompleted: 0, impossibleTasksCompleted: 0, ...over,
+});
+check('badges: a fresh account has earned nothing', newlyEarned(snap(), []), []);
+check('badges: the first finished task', newlyEarned(snap({ tasksCompleted: 1 }), []), ['first-task']);
+check(
+  'badges: facing the one marked impossible',
+  newlyEarned(snap({ tasksCompleted: 1, impossibleTasksCompleted: 1 }), ['first-task']),
+  ['faced-it'],
+);
+check('badges: a long haul', newlyEarned(snap({ longTasksCompleted: 1 }), []), ['long-haul']);
+check(
+  'badges: several can land at once',
+  newlyEarned(snap({ sprintsCompleted: 50, level: 5 }), []).sort(),
+  ['fifty-sprints', 'level-five', 'ten-sprints'],
+);
+check('badges: one already held is not offered again', newlyEarned(snap({ tasksCompleted: 4 }), ['first-task']), []);
+check(
+  'badges: a snapshot that no longer qualifies cannot take one back',
+  newlyEarned(snap({ sprintsCompleted: 0 }), ['ten-sprints']),
+  [],
+);
+check('badges: every badge has a name and a hint', BADGES.every((b) => b.name.length > 0 && b.hint.length > 0), true);
+check('badges: ids are unique', new Set(BADGES.map((b) => b.id)).size, BADGES.length);
+check('badges: lookup by id', badgeById('long-haul')?.name, 'Long haul');
+check('badges: an unknown id is not invented', badgeById('nope'), undefined);
 
 // --- breakdown matching (carried over) ---------------------------------------
 const MATCHES: [string, string][] = [

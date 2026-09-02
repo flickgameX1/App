@@ -14,6 +14,7 @@ export default function NowScreen({
   onNewTask,
   onOpen,
   onOpenPlan,
+  onOpenTheme,
   onDelete,
 }: {
   tasks: Task[];
@@ -24,6 +25,7 @@ export default function NowScreen({
   onNewTask: () => void;
   onOpen: (task: Task) => void;
   onOpenPlan: () => void;
+  onOpenTheme: () => void;
   onDelete: (task: Task) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -34,6 +36,14 @@ export default function NowScreen({
       <header className="flex items-baseline justify-between px-5">
         <h1 className="font-display text-2xl font-semibold tracking-tight">Now</h1>
         <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={onOpenTheme}
+            aria-label="Theme"
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-line"
+          >
+            <span aria-hidden="true" className="h-3 w-3 rounded-full bg-accent" />
+          </button>
           {tasks.length > 0 && (
             <button type="button" onClick={() => setEditing((v) => !v)} className="text-sm text-muted">
               {editing ? 'Done' : 'Edit'}
@@ -56,7 +66,7 @@ export default function NowScreen({
           <button
             type="button"
             onClick={onNewTask}
-            className="mt-6 rounded-xl bg-accent px-6 py-3.5 text-base font-semibold text-bg"
+            className="mt-6 rounded-xl bg-accent px-6 py-3.5 text-base font-semibold text-bg active:opacity-85"
           >
             Add a task
           </button>

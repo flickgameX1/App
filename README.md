@@ -19,7 +19,7 @@ for stages not yet reached are empty placeholders, not half-working screens.
 | 2 | Focus view: steps, sprint goal, progress | **done** |
 | 3 | Active sprint + completion screen (closes the core loop) | **done** |
 | 4 | Gamification header: level ring, XP, momentum, daily quest | **done** |
-| 5 | Stats page | not started |
+| 5 | Stats page | **done** |
 | 6 | Plan calendar | not started |
 | 7 | Polish: remaining palettes, badges, animation | not started |
 
@@ -82,6 +82,24 @@ must not inflate its worth.
 So a short easy job is 20 XP and a long one you've been avoiding for months is
 550. Stopping a task part-way pays `total × (sprints done / sprints planned)` —
 the remainder is forfeited, the work already put in never is.
+
+## Stats
+
+Total XP as the headline, then the consistency score — **active N of the last 7
+days**, a rolling count that dips by one and never shatters — then completions
+and focused time, then two charts:
+
+- **Total XP over the last 30 days.** A growth curve that starts at whatever was
+  earned before the window rather than restarting from zero, with a crosshair
+  and tooltip; one series, so the heading names it and no legend box is needed.
+- **XP by how hard it was.** Where the XP came from, across the four cognitive
+  load tiers. Bar length is the encoding and every bar wears the same hue: a
+  lightness ramp keyed to the tier would restate the ordering the labels already
+  carry, and its palest step drops under the contrast floor on the light theme.
+
+A **Show numbers** toggle exposes the same data as a table, so nothing is gated
+behind reading a chart. Chart colours are palette tokens, so both charts follow
+the active theme; the reward hue clears 3:1 on every palette's surface.
 
 ## The gamification layer
 

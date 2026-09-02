@@ -19,6 +19,7 @@ import NowScreen from './components/NowScreen';
 import NewTaskSheet from './components/NewTaskSheet';
 import FocusView from './components/FocusView';
 import ActiveSprint from './components/ActiveSprint';
+import StatsScreen from './components/StatsScreen';
 import StopSheet from './components/StopSheet';
 import SprintDone, { type SprintResult } from './components/SprintDone';
 import { dayKey, lastNDays } from './lib/time';
@@ -29,7 +30,7 @@ type TabId = 'now' | 'plan' | 'stats';
 const TABS: { id: TabId; label: string; waitingFor?: string }[] = [
   { id: 'now', label: 'Now' },
   { id: 'plan', label: 'Plan', waitingFor: 'Calendar — stage 6' },
-  { id: 'stats', label: 'Stats', waitingFor: 'Stats — stage 5' },
+  { id: 'stats', label: 'Stats' },
 ];
 
 export default function App() {
@@ -54,6 +55,9 @@ export default function App() {
   const statsLogs = useLiveQuery(() => db.statsLogs.toArray(), [], []);
   const running = useLiveQuery(() => db.sprints.where('status').equals('running').first(), []);
   const progress = useLiveQuery(() => db.progress.get(1), []);
+  // Stats spans finished work too, so it reads every task and every sprint.
+  const allTasks = useLiveQuery(() => db.tasks.toArray(), [], []);
+  const allSprints = useLiveQuery(() => db.sprints.toArray(), [], []);
 
   useEffect(() => {
     void ensureSeeded();
@@ -186,6 +190,8 @@ export default function App() {
             onOpen={(task) => setOpenTaskId(task.id ?? null)}
             onDelete={(task) => task.id && deleteTask(task.id)}
           />
+        ) : tab === 'stats' ? (
+          <StatsScreen logs={statsLogs} tasks={allTasks} sprints={allSprints} progress={progress} />
         ) : (
           <div className="flex flex-1 flex-col px-5 pt-safe">
             <h1 className="font-display text-2xl font-semibold tracking-tight">

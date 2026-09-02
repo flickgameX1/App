@@ -9,7 +9,7 @@ import 'fake-indexeddb/auto';
 import { readFileSync } from 'node:fs';
 import { db } from '../src/db/db';
 import { ensureSeeded } from '../src/db/seed';
-import type { StatsLog, Step, Task } from '../src/db/types';
+import type { Sprint, StatsLog, Step, Task } from '../src/db/types';
 import {
   completeTask,
   createTask,
@@ -27,6 +27,7 @@ import { focusedMinutes, focusedMs, remainingMs, sprintProgress } from '../src/l
 import { activeDaysIn, isActiveDay } from '../src/lib/consistency';
 import { LEVEL_TITLES, levelFor, levelProgress, levelTitle, xpForLevel } from '../src/lib/levels';
 import { momentumFrom, questToday } from '../src/lib/momentum';
+import { cumulativeXp, totals, xpByLoad, xpEarnedOn } from '../src/lib/stats';
 import { daysBetween } from '../src/lib/time';
 import { pacePlan } from '../src/lib/pace';
 import { goalFromSteps, xpPreview } from '../src/lib/goal';
@@ -452,6 +453,57 @@ const questProgress = { dailyQuestDone: 2, dailyQuestDate: mDay(9), dailyQuestTa
 check("quest: today's count", questToday(questProgress, mDay(9)), { done: 2, target: 3 });
 check('quest: yesterday\'s count is not today\'s', questToday(questProgress, mDay(10)), { done: 0, target: 3 });
 check('quest: no progress row yet', questToday(undefined, mDay(10)), { done: 0, target: 3 });
+
+
+// --- stats aggregation ----------------------------------------------------------
+const sDay = (d: number) => `2026-09-${String(d).padStart(2, '0')}`;
+const sWindow = [sDay(1), sDay(2), sDay(3), sDay(4)];
+const sLogs = [mkLog(sDay(2), { xpEarned: 30 }), mkLog(sDay(4), { xpEarned: 20 })];
+check(
+  'growth: the curve starts at what was already earned, not at zero',
+  cumulativeXp(sLogs, sWindow, 100).map((p) => p.cumulative),
+  [50, 80, 80, 100],
+);
+check('growth: quiet days hold the line rather than dropping it', cumulativeXp(sLogs, sWindow, 100)[2].xp, 0);
+check(
+  'growth: a first-ever window starts from zero',
+  cumulativeXp([mkLog(sDay(1), { xpEarned: 10 })], sWindow, 10).map((p) => p.cumulative),
+  [10, 10, 10, 10],
+);
+
+const statTask = (over: Partial<Task>): Task => ({
+  title: 't', type: 'general', priority: 'second', cognitiveLoad: 'moderate',
+  estimatedMinutes: 60, timeBucket: 'oneToThree', sprintLength: 25,
+  status: 'active', createdAt: 0, ...over,
+});
+const statSprint = (over: Partial<Sprint>): Sprint => ({
+  taskId: 1, goalText: '', plannedLength: 25, actualLength: 25, status: 'completed',
+  startedAt: 0, pausedMs: 0, xpAwarded: 0, ...over,
+});
+const doneTask = statTask({ id: 1, status: 'done', cognitiveLoad: 'impossible', timeBucket: 'under30' });
+const openTask = statTask({ id: 2, cognitiveLoad: 'easy', timeBucket: 'under30' });
+check('earned: a finished task is worth all of it', xpEarnedOn(doneTask, [statSprint({ xpAwarded: 10 })]), 50);
+check('earned: an unfinished one is worth what its sprints banked', xpEarnedOn(openTask, [statSprint({ taskId: 2, xpAwarded: 7 })]), 7);
+
+const slices = xpByLoad([doneTask, openTask], [statSprint({ taskId: 1, xpAwarded: 10 }), statSprint({ taskId: 2, xpAwarded: 7 })]);
+check('by load: every tier appears, hardest last', slices.map((s) => s.load), ['easy', 'moderate', 'challenging', 'impossible']);
+check('by load: a tier with nothing in it reads zero rather than vanishing', slices[1].xp, 0);
+check('by load: XP lands on the right tier', [slices[0].xp, slices[3].xp], [7, 50]);
+check('by load: only finished tasks are counted as done', [slices[0].tasks, slices[3].tasks], [0, 1]);
+
+check(
+  'totals: sprints, tasks and focused time',
+  totals([doneTask, openTask], [
+    statSprint({ actualLength: 25 }),
+    statSprint({ status: 'stopped', actualLength: 6 }),
+  ]),
+  { tasksCompleted: 1, sprintsCompleted: 1, focusMinutes: 31 },
+);
+check(
+  'totals: time from a sprint cut short still counts',
+  totals([], [statSprint({ status: 'stopped', actualLength: 12 })]).focusMinutes,
+  12,
+);
 
 // --- breakdown matching (carried over) ---------------------------------------
 const MATCHES: [string, string][] = [

@@ -69,9 +69,12 @@
   --pal-muted: #6a6053;
   --pal-dim: #7c7263;
   --pal-accent: #c1362a;
-  --pal-reward: #b07a17;
+  /* Reward and the second priority tier are stepped darker than the other
+     palettes' equivalents: on cream, the lighter ambers land near 2:1 and a
+     priority bar you cannot see is a priority system that does not work. */
+  --pal-reward: #9a6a12;
   --pal-p1: #d1495b;
-  --pal-p2: #e0a458;
+  --pal-p2: #b06e1f;
   --pal-p3: #3e8c84;
   --pal-line: #dbd3c4;
 }

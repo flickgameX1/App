@@ -15,7 +15,7 @@ for stages not yet reached are empty placeholders, not half-working screens.
 | Stage | Scope | State |
 |---|---|---|
 | 0 | Scaffold: palette token system + the full Dexie data model | **done** |
-| 1 | Now list view + task creation flow | not started |
+| 1 | Now list view + task creation flow | **done** |
 | 2 | Focus view: steps, sprint goal, progress | not started |
 | 3 | Active sprint + completion screen (closes the core loop) | not started |
 | 4 | Gamification header: level ring, XP, momentum, daily quest | not started |
@@ -65,9 +65,23 @@ uses yet, since adding them later would mean migrating live user data.
 - `Progress` — level, totalXp, momentum, daily quest, badges
 - `Settings` — active palette, default sprint length
 
-Two axes decide XP, both fixed at creation: **cognitive load** (user-selected)
-and **time bucket** (derived from the typed duration, never chosen). Sprint count
-chunks the work; it doesn't score it.
+## XP
+
+Two axes, both fixed at creation. **Time bucket** (derived from the typed
+duration, never chosen) sets the base pool; **cognitive load** (user-selected)
+multiplies it. Sprint count plays no part — chunking a task into more sprints
+must not inflate its worth.
+
+| bucket | base | | load | × |
+|---|---|---|---|---|
+| under 30m | 20 | | easy | 1.0 |
+| 30m–1h | 45 | | moderate | 1.4 |
+| 1–3h | 100 | | challenging | 1.9 |
+| 3h+ | 220 | | impossible | 2.5 |
+
+So a short easy job is 20 XP and a long one you've been avoiding for months is
+550. Stopping a task part-way pays `total × (sprints done / sprints planned)` —
+the remainder is forfeited, the work already put in never is.
 
 ## The breakdown system
 

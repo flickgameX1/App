@@ -1,20 +1,31 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from './db/db';
 import { ensureSeeded } from './db/seed';
+import { createTask, deleteTask, type NewTaskInput } from './db/actions';
 import { usePalette } from './lib/usePalette';
+import NowScreen from './components/NowScreen';
+import NewTaskSheet from './components/NewTaskSheet';
 
 type TabId = 'now' | 'plan' | 'stats';
 
-const TABS: { id: TabId; label: string; waitingFor: string }[] = [
-  { id: 'now', label: 'Now', waitingFor: 'Task list — stage 1' },
+const TABS: { id: TabId; label: string; waitingFor?: string }[] = [
+  { id: 'now', label: 'Now' },
   { id: 'plan', label: 'Plan', waitingFor: 'Calendar — stage 6' },
   { id: 'stats', label: 'Stats', waitingFor: 'Stats — stage 5' },
 ];
 
 export default function App() {
   const [tab, setTab] = useState<TabId>('now');
+  const [adding, setAdding] = useState(false);
+
   const settings = useLiveQuery(() => db.settings.get(1));
+  const tasks = useLiveQuery(() => db.tasks.where('status').equals('active').toArray(), [], []);
+  const completedSprints = useLiveQuery(
+    () => db.sprints.where('status').equals('completed').toArray(),
+    [],
+    [],
+  );
 
   useEffect(() => {
     void ensureSeeded();
@@ -22,15 +33,36 @@ export default function App() {
 
   usePalette(settings?.activePaletteId);
 
-  const active = TABS.find((t) => t.id === tab)!;
+  const sprintsDone = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const sprint of completedSprints) {
+      counts.set(sprint.taskId, (counts.get(sprint.taskId) ?? 0) + 1);
+    }
+    return counts;
+  }, [completedSprints]);
+
+  const placeholder = TABS.find((t) => t.id === tab)?.waitingFor;
 
   return (
     <div className="mx-auto flex h-full max-w-md flex-col">
-      <main className="flex flex-1 flex-col px-5 pt-safe">
-        <h1 className="font-display text-2xl font-semibold tracking-tight">{active.label}</h1>
-        <div className="flex flex-1 items-center justify-center">
-          <p className="text-sm text-dim">{active.waitingFor}</p>
-        </div>
+      <main className="flex flex-1 flex-col overflow-y-auto">
+        {tab === 'now' ? (
+          <NowScreen
+            tasks={tasks}
+            sprintsDone={sprintsDone}
+            onNewTask={() => setAdding(true)}
+            onDelete={(task) => task.id && deleteTask(task.id)}
+          />
+        ) : (
+          <div className="flex flex-1 flex-col px-5 pt-safe">
+            <h1 className="font-display text-2xl font-semibold tracking-tight">
+              {TABS.find((t) => t.id === tab)?.label}
+            </h1>
+            <div className="flex flex-1 items-center justify-center">
+              <p className="text-sm text-dim">{placeholder}</p>
+            </div>
+          </div>
+        )}
       </main>
 
       <nav className="border-t border-line pb-safe">
@@ -59,6 +91,13 @@ export default function App() {
           })}
         </ul>
       </nav>
+
+      <NewTaskSheet
+        open={adding}
+        onClose={() => setAdding(false)}
+        defaultSprintLength={settings?.defaultSprintLength ?? 25}
+        onAdd={(input: NewTaskInput) => void createTask(input)}
+      />
     </div>
   );
 }

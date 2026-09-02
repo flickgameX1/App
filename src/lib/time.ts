@@ -56,3 +56,31 @@ export function formatDuration(minutes: number): string {
   const m = Math.round(minutes % 60);
   return m ? `${h}h ${m}m` : `${h}h`;
 }
+
+/**
+ * Parses a typed duration. The estimate is free text on purpose — presets make
+ * people pick the nearest allowed lie instead of the number they actually mean —
+ * so this accepts the shapes people type: "90", "90m", "1h", "1h30", "1h 30m",
+ * "1.5 hours". Returns minutes, or null when it can't tell.
+ */
+export function parseDuration(input: string): number | null {
+  const s = input.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (!s) return null;
+
+  const hoursAndMinutes = s.match(
+    /^(\d+(?:[.,]\d+)?)\s*(?:h|hr|hrs|hour|hours)(?:\s*(\d+)\s*(?:m|min|mins|minute|minutes)?)?$/,
+  );
+  if (hoursAndMinutes) {
+    const hours = parseFloat(hoursAndMinutes[1].replace(',', '.'));
+    const minutes = hoursAndMinutes[2] ? parseInt(hoursAndMinutes[2], 10) : 0;
+    return Math.round(hours * 60 + minutes);
+  }
+
+  const minutesOnly = s.match(/^(\d+(?:[.,]\d+)?)\s*(?:m|min|mins|minute|minutes)$/);
+  if (minutesOnly) return Math.round(parseFloat(minutesOnly[1].replace(',', '.')));
+
+  const bare = s.match(/^(\d+(?:[.,]\d+)?)$/);
+  if (bare) return Math.round(parseFloat(bare[1].replace(',', '.')));
+
+  return null;
+}

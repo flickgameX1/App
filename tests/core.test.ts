@@ -10,10 +10,14 @@ import { readFileSync } from 'node:fs';
 import { db } from '../src/db/db';
 import { ensureSeeded } from '../src/db/seed';
 import type { Task } from '../src/db/types';
+import { createTask, deleteTask } from '../src/db/actions';
 import { sprintsNeeded, timeBucketFor, timeBucketLabel } from '../src/lib/buckets';
+import { partialXp, taskXp } from '../src/lib/xp';
+import { pacePlan } from '../src/lib/pace';
+import { sortForList } from '../src/lib/ordering';
 import { DEFAULT_PALETTE_ID, PALETTES, PALETTE_TOKENS, paletteById } from '../src/lib/palettes';
 import { matchTemplate } from '../src/lib/matching';
-import { dayKey, daysUntil, dueLabel, formatClock, formatDuration, lastNDays } from '../src/lib/time';
+import { dayKey, daysUntil, dueLabel, formatClock, formatDuration, lastNDays, parseDuration } from '../src/lib/time';
 
 let failures = 0;
 let checks = 0;
@@ -132,6 +136,102 @@ check('breakdowns: one personal version per task type', await (async () => {
     return 'rejected';
   }
 })(), 'rejected');
+
+
+// --- XP: two axes, sprint count deliberately absent ---------------------------
+check('xp: a short easy task', taskXp({ timeBucket: 'under30', cognitiveLoad: 'easy' }), 20);
+check('xp: a long impossible one', taskXp({ timeBucket: 'long', cognitiveLoad: 'impossible' }), 550);
+check('xp: load multiplies the pool', taskXp({ timeBucket: 'oneToThree', cognitiveLoad: 'challenging' }), 190);
+ok(
+  'xp: harder always pays more at the same size',
+  taskXp({ timeBucket: 'oneToThree', cognitiveLoad: 'impossible' }) >
+    taskXp({ timeBucket: 'oneToThree', cognitiveLoad: 'easy' }),
+);
+check('xp: stopping half way pays half', partialXp({ timeBucket: 'long', cognitiveLoad: 'easy' }, 3, 6), 110);
+check('xp: no sprints done, nothing forfeited but nothing earned', partialXp({ timeBucket: 'long', cognitiveLoad: 'easy' }, 0, 6), 0);
+check('xp: overrunning the plan does not overpay', partialXp({ timeBucket: 'long', cognitiveLoad: 'easy' }, 9, 6), 220);
+
+// --- typed durations ----------------------------------------------------------
+check('duration: bare minutes', parseDuration('90'), 90);
+check('duration: minutes with a unit', parseDuration('45m'), 45);
+check('duration: hours', parseDuration('2h'), 120);
+check('duration: hours and minutes, no space', parseDuration('1h30'), 90);
+check('duration: hours and minutes, spelled out', parseDuration('1 hour 30 mins'), 90);
+check('duration: fractional hours', parseDuration('1.5 hours'), 90);
+check('duration: a comma decimal', parseDuration('1,5h'), 90);
+check('duration: nonsense is rejected rather than guessed', parseDuration('soon'), null);
+check('duration: empty is not zero', parseDuration('  '), null);
+
+// --- pace: a target ahead, never a deficit behind ------------------------------
+check('pace: spread over the days left', pacePlan(6, 3), { sprintsPerDay: 2, daysLeft: 3 });
+check('pace: a deadline today is all for today', pacePlan(4, 0), { sprintsPerDay: 4, daysLeft: 1 });
+check('pace: a past deadline still gets a plan, not a debt', pacePlan(4, -3), { sprintsPerDay: 4, daysLeft: 1 });
+check('pace: nothing left, nothing to say', pacePlan(0, 5), null);
+check('pace: no deadline, no pace', pacePlan(6, null), null);
+
+// --- creating a task attaches its breakdown -----------------------------------
+const newId = await createTask({
+  title: 'tidy bedroom',
+  priority: 'top',
+  cognitiveLoad: 'easy',
+  estimatedMinutes: 45,
+  sprintLength: 20,
+});
+const created = await db.tasks.get(newId);
+check('create: the type is matched from the title', created?.type, 'clean-room');
+check('create: the bucket is derived, not asked for', created?.timeBucket, 'halfToHour');
+const createdSteps = await db.steps.where({ taskId: newId }).sortBy('order');
+ok('create: the breakdown is attached as steps', createdSteps.length > 0);
+check('create: steps start unticked and in order', createdSteps.map((s) => s.order), [...createdSteps.keys()]);
+
+// A personal breakdown for that type wins over the generic template.
+await db.breakdowns.put({ taskType: 'clean-room', steps: ['Open a window', 'Bin bag first'], source: 'personal', updatedAt: Date.now() });
+const personalId = await createTask({
+  title: 'clean my room',
+  priority: 'canWait',
+  cognitiveLoad: 'moderate',
+  estimatedMinutes: 30,
+  sprintLength: 25,
+});
+check(
+  'create: a personal breakdown is used instead of the template',
+  (await db.steps.where({ taskId: personalId }).sortBy('order')).map((s) => s.text),
+  ['Open a window', 'Bin bag first'],
+);
+
+await deleteTask(personalId);
+check('delete: the task goes', await db.tasks.get(personalId), undefined);
+check('delete: its steps go with it', await db.steps.where({ taskId: personalId }).count(), 0);
+
+// --- list order ---------------------------------------------------------------
+const row = (over: Partial<Task>): Task => ({
+  title: 'x',
+  type: 'general',
+  priority: 'second',
+  cognitiveLoad: 'moderate',
+  estimatedMinutes: 60,
+  timeBucket: 'oneToThree',
+  sprintLength: 25,
+  status: 'active',
+  createdAt: 0,
+  ...over,
+});
+const day2 = 86_400_000;
+check(
+  'list: priority first, then deadline',
+  sortForList([
+    row({ title: 'can-wait', priority: 'canWait', createdAt: 1 }),
+    row({ title: 'second-later', priority: 'second', deadline: 2 * day2 }),
+    row({ title: 'top', priority: 'top', createdAt: 3 }),
+    row({ title: 'second-sooner', priority: 'second', deadline: day2 }),
+  ]).map((t: Task) => t.title),
+  ['top', 'second-sooner', 'second-later', 'can-wait'],
+);
+check(
+  'list: a dated task outranks an undated one at the same priority',
+  sortForList([row({ title: 'undated' }), row({ title: 'dated', deadline: day2 })]).map((t: Task) => t.title),
+  ['dated', 'undated'],
+);
 
 // --- breakdown matching (carried over) ---------------------------------------
 const MATCHES: [string, string][] = [

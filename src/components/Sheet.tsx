@@ -1,16 +1,17 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 
-interface SheetProps {
+/** Bottom sheet. Everything that isn't one of the three tabs lives in one. */
+export default function Sheet({
+  open,
+  onClose,
+  title,
+  children,
+}: {
   open: boolean;
   onClose: () => void;
   title: string;
-  /** Hide the title visually but keep it for screen readers. */
-  quietTitle?: boolean;
   children: ReactNode;
-}
-
-/** Bottom sheet. Everything that isn't one of the three screens lives in one. */
-export default function Sheet({ open, onClose, title, quietTitle, children }: SheetProps) {
+}) {
   const panel = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -19,10 +20,7 @@ export default function Sheet({ open, onClose, title, quietTitle, children }: Sh
       if (e.key === 'Escape') onClose();
     };
     document.addEventListener('keydown', onKey);
-    const focusable = panel.current?.querySelector<HTMLElement>(
-      'input, textarea, button:not([data-no-autofocus])',
-    );
-    focusable?.focus();
+    panel.current?.querySelector<HTMLElement>('input, textarea, button:not([data-no-autofocus])')?.focus();
     return () => document.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
@@ -34,7 +32,7 @@ export default function Sheet({ open, onClose, title, quietTitle, children }: Sh
         type="button"
         aria-label="Close"
         onClick={onClose}
-        className="absolute inset-0 bg-black/60"
+        className="absolute inset-0 bg-black/55"
         data-no-autofocus
       />
       <div
@@ -42,10 +40,17 @@ export default function Sheet({ open, onClose, title, quietTitle, children }: Sh
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="relative max-h-[88vh] overflow-y-auto rounded-t-3xl border-t border-line bg-surface px-5 pt-3 pb-safe"
+        className="relative mx-auto max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-3xl border-t border-line bg-surface px-5 pt-3 pb-safe"
       >
-        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-line" />
-        {!quietTitle && <h2 className="mb-4 text-lg font-semibold">{title}</h2>}
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" />
+        {/* The backdrop closes the sheet, but a long one pushes it off screen —
+            so there is always a control you can reach. */}
+        <div className="mb-4 flex items-baseline justify-between gap-3">
+          <h2 className="font-display text-xl font-semibold tracking-tight">{title}</h2>
+          <button type="button" onClick={onClose} className="shrink-0 text-sm text-muted" data-no-autofocus>
+            Done
+          </button>
+        </div>
         {children}
       </div>
     </div>

@@ -1,92 +1,93 @@
-import type { Step, Task } from '../db/types';
-import TaskCard from './TaskCard';
+import { useState } from 'react';
+import type { Progress, Task } from '../db/types';
+import TaskRow from './TaskRow';
+import ProgressHeader from './ProgressHeader';
 import HorizonStrip from './HorizonStrip';
-
-const QUICK_ADDS = ['Clean my room', 'Reply to emails', 'Study session', 'Washing up'];
+import { sortForList } from '../lib/ordering';
 
 export default function NowScreen({
   tasks,
-  currentTask,
-  personalised,
-  onStart,
-  onToggleStep,
-  onSaveSteps,
-  onComplete,
-  onPickTask,
-  onOpenPicker,
-  onOpenAdd,
-  onQuickAdd,
+  sprintsDone,
+  progress,
+  momentum,
+  today,
+  onNewTask,
+  onOpen,
   onOpenPlan,
+  onOpenTheme,
+  onDelete,
 }: {
   tasks: Task[];
-  currentTask: Task | null;
-  personalised: boolean;
-  onStart: (minutes: number) => void;
-  onToggleStep: (stepId: string, done: boolean) => void;
-  onSaveSteps: (steps: Step[]) => void;
-  onComplete: () => void;
-  onPickTask: (task: Task) => void;
-  onOpenPicker: () => void;
-  onOpenAdd: () => void;
-  onQuickAdd: (title: string) => void;
+  sprintsDone: Map<number, number>;
+  progress: Progress | undefined;
+  momentum: number;
+  today: string;
+  onNewTask: () => void;
+  onOpen: (task: Task) => void;
   onOpenPlan: () => void;
+  onOpenTheme: () => void;
+  onDelete: (task: Task) => void;
 }) {
-  const others = tasks.filter((t) => t.id !== currentTask?.id);
+  const [editing, setEditing] = useState(false);
+  const sorted = sortForList(tasks);
 
   return (
-    <div className="pt-safe pb-8">
-      <header className="mb-4 flex items-center justify-between px-5">
-        <h1 className="text-sm font-medium text-ink-3">Now</h1>
-        <button type="button" onClick={onOpenAdd} className="text-sm text-accent-ink">
-          + Task
-        </button>
+    <div className="flex flex-1 flex-col pt-safe">
+      <header className="flex items-baseline justify-between px-5">
+        <h1 className="font-display text-2xl font-semibold tracking-tight">Now</h1>
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={onOpenTheme}
+            aria-label="Settings"
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-line"
+          >
+            <span aria-hidden="true" className="h-3 w-3 rounded-full bg-accent" />
+          </button>
+          {tasks.length > 0 && (
+            <button type="button" onClick={() => setEditing((v) => !v)} className="text-sm text-muted">
+              {editing ? 'Done' : 'Edit'}
+            </button>
+          )}
+          <button type="button" onClick={onNewTask} className="text-sm font-medium text-accent">
+            + Task
+          </button>
+        </div>
       </header>
 
-      {currentTask ? (
-        <TaskCard
-          task={currentTask}
-          personalised={personalised}
-          onStart={onStart}
-          onToggleStep={onToggleStep}
-          onSaveSteps={onSaveSteps}
-          onComplete={onComplete}
-          onSwitch={onOpenPicker}
-        />
-      ) : (
-        <section className="mx-5 rounded-3xl border border-line bg-surface p-6">
-          <h2 className="text-xl font-semibold">What are you doing right now?</h2>
-          <p className="mt-2 text-sm text-ink-2">
-            Pick anything. You get the steps and a sprint length — you don’t have to work out where to
-            start.
+      <ProgressHeader progress={progress} momentum={momentum} today={today} />
+
+      {sorted.length === 0 ? (
+        <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
+          <p className="font-display text-lg">Nothing on the list.</p>
+          <p className="mt-2 text-sm text-muted">
+            Add a task and you'll get the steps and a sprint length with it.
           </p>
           <button
             type="button"
-            onClick={tasks.length ? onOpenPicker : onOpenAdd}
-            className="mt-5 w-full rounded-2xl bg-accent py-4 text-base font-semibold text-white"
+            onClick={onNewTask}
+            className="mt-6 rounded-xl bg-accent px-6 py-3.5 text-base font-semibold text-bg active:opacity-85"
           >
-            {tasks.length ? 'Pick a task' : 'Add a task'}
+            Add a task
           </button>
-          {tasks.length === 0 && (
-            <div className="mt-5">
-              <p className="mb-2 text-xs text-ink-3">Or start with one of these</p>
-              <div className="flex flex-wrap gap-2">
-                {QUICK_ADDS.map((title) => (
-                  <button
-                    key={title}
-                    type="button"
-                    onClick={() => onQuickAdd(title)}
-                    className="rounded-full border border-line bg-surface-2 px-3 py-2 text-sm text-ink-2"
-                  >
-                    {title}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
+        </div>
+      ) : (
+        <>
+        <ul className="mt-4 px-5">
+          {sorted.map((task) => (
+            <TaskRow
+              key={task.id}
+              task={task}
+              sprintsDone={sprintsDone.get(task.id!) ?? 0}
+              editing={editing}
+              onOpen={() => onOpen(task)}
+              onDelete={() => onDelete(task)}
+            />
+          ))}
+        </ul>
+        <HorizonStrip tasks={tasks} onOpenPlan={onOpenPlan} onOpen={onOpen} />
+        </>
       )}
-
-      <HorizonStrip tasks={others} onOpenPlan={onOpenPlan} onPick={onPickTask} />
     </div>
   );
 }

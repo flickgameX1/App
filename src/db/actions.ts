@@ -1,94 +1,185 @@
 import { db } from './db';
-import type { Priority, Sprint, SprintStatus, Step, Task, Urgency } from './types';
+import type { CognitiveLoad, Priority, SprintStatus, Task } from './types';
 import { matchTemplate } from '../lib/matching';
-import { resolveSteps, rememberBreakdown } from '../lib/breakdowns';
-import { templateByKey } from '../lib/templates';
-import { focusedMs } from '../lib/sprint';
-import { sprintXp, taskXp } from '../lib/xp';
-import { dayKey } from '../lib/time';
+import { rememberBreakdown, resolveStepTexts } from '../lib/breakdowns';
+import { sprintsNeeded, timeBucketFor } from '../lib/buckets';
+import { sprintAward, taskXp } from '../lib/xp';
+import { focusedMinutes } from '../lib/sprintClock';
+import { activeDaysIn } from '../lib/consistency';
+import { levelFor } from '../lib/levels';
+import { momentumFrom } from '../lib/momentum';
+import { newlyEarned, type BadgeSnapshot } from '../lib/badges';
+import { dayKey, lastNDays } from '../lib/time';
 
 export interface NewTaskInput {
   title: string;
+  /** Breakdown template key. Falls back to fuzzy-matching the title. */
   type?: string;
-  priority?: Priority;
-  urgency?: Urgency;
+  priority: Priority;
+  cognitiveLoad: CognitiveLoad;
+  estimatedMinutes: number;
+  sprintLength: number;
   deadline?: number;
-  estimatedEffort?: number;
-}
-
-export async function createTask(input: NewTaskInput): Promise<number> {
-  const type = input.type ?? matchTemplate(input.title).template.key;
-  const template = templateByKey(type);
-  const task: Task = {
-    title: input.title.trim(),
-    type,
-    priority: input.priority ?? 2,
-    urgency: input.urgency ?? 2,
-    deadline: input.deadline,
-    estimatedEffort: input.estimatedEffort ?? template.defaultEffort,
-    status: 'active',
-    steps: await resolveSteps(type),
-    createdAt: Date.now(),
-  };
-  return db.tasks.add(task) as Promise<number>;
-}
-
-export async function updateTask(id: number, changes: Partial<Task>): Promise<void> {
-  await db.tasks.update(id, changes);
-}
-
-/** Ticking a step off is progress, not a template edit — it is never remembered. */
-export async function setStepDone(taskId: number, stepId: string, done: boolean): Promise<void> {
-  const task = await db.tasks.get(taskId);
-  if (!task) return;
-  const steps = task.steps.map((s) => (s.id === stepId ? { ...s, done } : s));
-  await db.tasks.update(taskId, { steps });
 }
 
 /**
- * Save an edited breakdown against the task *and* against the task type, so the
- * user's version is what they are offered next time they do this kind of thing.
+ * Creates the task and attaches its breakdown as selectable steps. The steps are
+ * rows from the start, in order but not sequenced — nothing here decides which
+ * one has to be done first.
  */
-export async function saveBreakdown(taskId: number, steps: Step[]): Promise<void> {
-  const task = await db.tasks.get(taskId);
-  if (!task) return;
-  const cleaned = steps.filter((s) => s.text.trim().length > 0);
-  await db.tasks.update(taskId, { steps: cleaned });
-  await rememberBreakdown(task.type, cleaned);
+export async function createTask(input: NewTaskInput): Promise<number> {
+  const type = input.type ?? matchTemplate(input.title).template.key;
+  const stepTexts = await resolveStepTexts(type);
+
+  return db.transaction('rw', db.tasks, db.steps, async () => {
+    const task: Task = {
+      title: input.title.trim(),
+      type,
+      priority: input.priority,
+      cognitiveLoad: input.cognitiveLoad,
+      estimatedMinutes: input.estimatedMinutes,
+      timeBucket: timeBucketFor(input.estimatedMinutes),
+      sprintLength: input.sprintLength,
+      deadline: input.deadline,
+      status: 'active',
+      createdAt: Date.now(),
+    };
+    const taskId = (await db.tasks.add(task)) as number;
+    await db.steps.bulkAdd(
+      stepTexts.map((text, order) => ({ taskId, text, done: false, order })),
+    );
+    return taskId;
+  });
 }
 
 export async function deleteTask(taskId: number): Promise<void> {
-  await db.transaction('rw', db.tasks, db.sprints, async () => {
+  await db.transaction('rw', db.tasks, db.steps, db.sprints, async () => {
+    await db.steps.where('taskId').equals(taskId).delete();
     await db.sprints.where('taskId').equals(taskId).delete();
     await db.tasks.delete(taskId);
   });
 }
 
-async function addToLog(
-  date: string,
-  delta: { tasksCompleted?: number; sprintsCompleted?: number; focusMinutes?: number; xpEarned?: number },
-): Promise<void> {
+/**
+ * Replace a task's steps and remember them as the user's version of the task
+ * type. Order is renumbered from the list the user left behind.
+ */
+export async function saveSteps(taskId: number, texts: string[]): Promise<void> {
+  const task = await db.tasks.get(taskId);
+  if (!task) return;
+  const cleaned = texts.map((t) => t.trim()).filter(Boolean);
+  await db.transaction('rw', db.steps, async () => {
+    const existing = await db.steps.where('taskId').equals(taskId).sortBy('order');
+    // Keep the done flags of steps whose text survived the edit.
+    const doneByText = new Map(existing.filter((s) => s.done).map((s) => [s.text, true]));
+    await db.steps.where('taskId').equals(taskId).delete();
+    await db.steps.bulkAdd(
+      cleaned.map((text, order) => ({ taskId, text, order, done: doneByText.get(text) ?? false })),
+    );
+  });
+  await rememberBreakdown(task.type, cleaned);
+}
+
+// ─── Sprints ────────────────────────────────────────────────────────────────
+
+/**
+ * Rolls today's log forward and keeps the running totals in step. Every ending
+ * comes through here, so "log completion" is one place rather than three.
+ */
+async function logActivity(delta: {
+  sprintsCompleted?: number;
+  tasksCompleted?: number;
+  xpEarned?: number;
+}): Promise<string[]> {
+  const date = dayKey();
   const existing = await db.statsLogs.get(date);
   await db.statsLogs.put({
     date,
-    tasksCompleted: (existing?.tasksCompleted ?? 0) + (delta.tasksCompleted ?? 0),
     sprintsCompleted: (existing?.sprintsCompleted ?? 0) + (delta.sprintsCompleted ?? 0),
-    focusMinutes: (existing?.focusMinutes ?? 0) + (delta.focusMinutes ?? 0),
+    tasksCompleted: (existing?.tasksCompleted ?? 0) + (delta.tasksCompleted ?? 0),
     xpEarned: (existing?.xpEarned ?? 0) + (delta.xpEarned ?? 0),
+    consistencyWindow: 0,
   });
+
+  // Recomputed after the write so today counts itself.
+  const window = lastNDays(7);
+  const logs = await db.statsLogs.where('date').anyOf(window).toArray();
+  await db.statsLogs.update(date, { consistencyWindow: activeDaysIn(logs, window) });
+
+  const progress = await db.progress.get(1);
+  if (progress) {
+    // The daily quest resets nightly, so a count from an earlier day starts over.
+    const sameDay = progress.dailyQuestDate === date;
+    const totalXp = progress.totalXp + (delta.xpEarned ?? 0);
+    const allLogs = await db.statsLogs.toArray();
+    await db.progress.update(1, {
+      totalXp,
+      level: levelFor(totalXp),
+      momentumDays: momentumFrom(allLogs, date),
+      lastActiveDate: date,
+      dailyQuestDate: date,
+      dailyQuestDone: (sameDay ? progress.dailyQuestDone : 0) + (delta.sprintsCompleted ?? 0),
+    });
+    return settleBadges();
+  }
+  return [];
 }
 
-export async function startSprint(taskId: number, plannedLength: number): Promise<number> {
-  const sprint: Sprint = {
+/**
+ * Badges are appended, never recalculated away: a snapshot that no longer earns
+ * one leaves the badge exactly where it is.
+ */
+async function settleBadges(): Promise<string[]> {
+  const progress = await db.progress.get(1);
+  if (!progress) return [];
+
+  const [tasks, sprints, logs] = await Promise.all([
+    db.tasks.toArray(),
+    db.sprints.toArray(),
+    db.statsLogs.toArray(),
+  ]);
+  const done = tasks.filter((t) => t.status === 'done');
+  const snapshot: BadgeSnapshot = {
+    tasksCompleted: done.length,
+    sprintsCompleted: sprints.filter((s) => s.status === 'completed').length,
+    level: levelFor(progress.totalXp),
+    momentum: momentumFrom(logs, dayKey()),
+    longTasksCompleted: done.filter((t) => t.timeBucket === 'long').length,
+    impossibleTasksCompleted: done.filter((t) => t.cognitiveLoad === 'impossible').length,
+  };
+
+  const fresh = newlyEarned(snapshot, progress.badgesEarned);
+  if (fresh.length) {
+    await db.progress.update(1, { badgesEarned: [...progress.badgesEarned, ...fresh] });
+  }
+  return fresh;
+}
+
+export async function startSprint(
+  taskId: number,
+  goalText: string,
+  stepIds: number[],
+  plannedLength: number,
+): Promise<number> {
+  // One sprint at a time. A sprint left running by another tab or an interrupted
+  // session is closed out as stopped rather than orphaned — it still pays for
+  // the time it holds, so closing it loses nothing.
+  const orphans = await db.sprints.where('status').equals('running').toArray();
+  for (const orphan of orphans) {
+    if (orphan.id !== undefined) await endSprint(orphan.id, 'stopped');
+  }
+
+  return db.sprints.add({
     taskId,
+    goalText: goalText.trim(),
+    stepIds,
     plannedLength,
     actualLength: 0,
     status: 'running',
     startedAt: Date.now(),
     pausedMs: 0,
-    xpEarned: 0,
-  };
-  return db.sprints.add(sprint) as Promise<number>;
+    xpAwarded: 0,
+  }) as Promise<number>;
 }
 
 export async function pauseSprint(sprintId: number): Promise<void> {
@@ -106,40 +197,85 @@ export async function resumeSprint(sprintId: number): Promise<void> {
   });
 }
 
+export interface SprintOutcome {
+  xpAwarded: number;
+  focusedMinutes: number;
+  newBadges: string[];
+}
+
 /**
- * End a sprint. `completed` is the timer running out, `paused` is "I'll come
- * back to this", `scrapped` is "done for now". None of them is a failure and all
- * three pay XP for the time actually spent.
+ * Ends a sprint. 'completed' is the timer running out or the goal being called
+ * done; 'paused' is "resume later"; 'stopped' is "done for now". None of the
+ * three is a failure and all three pay for the time spent.
  */
-export async function endSprint(sprintId: number, status: Exclude<SprintStatus, 'running'>): Promise<number> {
+export async function endSprint(
+  sprintId: number,
+  status: Exclude<SprintStatus, 'running'>,
+): Promise<SprintOutcome> {
   const sprint = await db.sprints.get(sprintId);
-  if (!sprint || sprint.status !== 'running') return 0;
+  if (!sprint || sprint.status !== 'running') return { xpAwarded: 0, focusedMinutes: 0, newBadges: [] };
+
   const endedAt = Date.now();
-  // Cap at the planned length: if the app was closed when the timer ran out, the
-  // wall clock kept going but the sprint did not.
-  const elapsed = focusedMs({ ...sprint, endedAt }, endedAt) / 60_000;
-  const focusMinutes = Math.round(Math.min(sprint.plannedLength, elapsed) * 10) / 10;
+  const minutes = focusedMinutes({ ...sprint, endedAt }, endedAt);
   const task = await db.tasks.get(sprint.taskId);
-  const xp = sprintXp(focusMinutes, task?.priority ?? 2, status);
-  await db.sprints.update(sprintId, { status, endedAt, actualLength: focusMinutes, xpEarned: xp, pausedAt: undefined });
-  await addToLog(dayKey(endedAt), {
-    sprintsCompleted: status === 'completed' ? 1 : 0,
-    focusMinutes,
-    xpEarned: xp,
+  if (!task) return { xpAwarded: 0, focusedMinutes: minutes, newBadges: [] };
+
+  const siblings = await db.sprints.where('taskId').equals(sprint.taskId).toArray();
+  const alreadyAwarded = siblings.reduce((sum, s) => sum + (s.id === sprintId ? 0 : s.xpAwarded), 0);
+
+  const xpAwarded = sprintAward({
+    totalXp: taskXp(task),
+    sprintsPlanned: sprintsNeeded(task.estimatedMinutes, task.sprintLength),
+    alreadyAwarded,
+    focusedMinutes: minutes,
+    plannedLength: sprint.plannedLength,
+    finished: status === 'completed',
   });
-  return xp;
+
+  await db.sprints.update(sprintId, {
+    status,
+    endedAt,
+    actualLength: minutes,
+    xpAwarded,
+    pausedAt: undefined,
+  });
+  const newBadges = await logActivity({
+    sprintsCompleted: status === 'completed' ? 1 : 0,
+    xpEarned: xpAwarded,
+  });
+
+  return { xpAwarded, focusedMinutes: minutes, newBadges };
 }
 
-export async function completeTask(taskId: number): Promise<number> {
+/** Marks the steps a sprint was for as done. Only ever called when asked to. */
+export async function markGoalDone(sprintId: number): Promise<void> {
+  const sprint = await db.sprints.get(sprintId);
+  if (!sprint?.stepIds?.length) return;
+  await db.steps.where('id').anyOf(sprint.stepIds).modify({ done: true });
+}
+
+/**
+ * Finishing the task pays out whatever the sprints left on the table, so the
+ * total earned always lands exactly on what the task was worth.
+ */
+export interface TaskOutcome {
+  xpAwarded: number;
+  newBadges: string[];
+}
+
+export async function completeTask(taskId: number): Promise<TaskOutcome> {
   const task = await db.tasks.get(taskId);
-  if (!task || task.status === 'done') return 0;
-  const completedAt = Date.now();
-  const xp = taskXp(task);
-  await db.tasks.update(taskId, { status: 'done', completedAt });
-  await addToLog(dayKey(completedAt), { tasksCompleted: 1, xpEarned: xp });
-  return xp;
+  if (!task || task.status === 'done') return { xpAwarded: 0, newBadges: [] };
+  const sprints = await db.sprints.where('taskId').equals(taskId).toArray();
+  const awarded = sprints.reduce((sum, s) => sum + s.xpAwarded, 0);
+  const remainder = Math.max(0, taskXp(task) - awarded);
+
+  await db.tasks.update(taskId, { status: 'done', completedAt: Date.now() });
+  const newBadges = await logActivity({ tasksCompleted: 1, xpEarned: remainder });
+  return { xpAwarded: remainder, newBadges };
 }
 
-export async function reopenTask(taskId: number): Promise<void> {
-  await db.tasks.update(taskId, { status: 'active', completedAt: undefined });
+/** The active palette. Every colour in the UI follows from this one row. */
+export async function setPalette(paletteId: string): Promise<void> {
+  await db.settings.update(1, { activePaletteId: paletteId });
 }

@@ -1,72 +1,87 @@
-import type { Priority, SprintStatus, StatsLog, Task } from '../db/types';
+import type { CognitiveLoad, Task, TimeBucket } from '../db/types';
 
 /**
- * XP is weighted by difficulty (task priority), length (focused minutes) and
- * execution (how the sprint ended). Crucially, an abandoned sprint still pays:
- * showing up is the behaviour worth reinforcing, so nothing here can score zero.
+ * XP has two independent axes, both fixed when the task is created:
+ *
+ *   time bucket    (derived from the typed duration) sets the base pool
+ *   cognitive load (chosen by the user)              multiplies it
+ *
+ * Sprint count deliberately plays no part. Chunking a task into more sprints
+ * must not inflate its worth, or the scoring quietly rewards padding rather
+ * than finishing.
  */
-const DIFFICULTY: Record<Priority, number> = { 1: 1, 2: 1.15, 3: 1.35 };
-
-const EXECUTION: Record<Exclude<SprintStatus, 'running'>, number> = {
-  completed: 1,
-  paused: 0.8,
-  scrapped: 0.5,
+export const TIME_BUCKET_XP: Record<TimeBucket, number> = {
+  under30: 20,
+  halfToHour: 45,
+  oneToThree: 100,
+  long: 220,
 };
 
-export function sprintXp(
-  focusMinutes: number,
-  priority: Priority,
-  status: Exclude<SprintStatus, 'running'>,
+/**
+ * "Impossible" is the tier for the thing that has been on the list for months.
+ * It pays 2.5×, because the barrier there is not the hours — it's the starting.
+ */
+export const LOAD_MULTIPLIER: Record<CognitiveLoad, number> = {
+  easy: 1,
+  moderate: 1.4,
+  challenging: 1.9,
+  impossible: 2.5,
+};
+
+export const LOAD_LABELS: Record<CognitiveLoad, string> = {
+  easy: 'easy',
+  moderate: 'moderate',
+  challenging: 'challenging',
+  impossible: 'impossible',
+};
+
+/** What the whole task is worth, awarded on completion. */
+export function taskXp(task: Pick<Task, 'timeBucket' | 'cognitiveLoad'>): number {
+  return Math.round(TIME_BUCKET_XP[task.timeBucket] * LOAD_MULTIPLIER[task.cognitiveLoad]);
+}
+
+/**
+ * Stopping a task part-way pays for the part that got done. Forfeiting the
+ * remainder is the only cost — there is no path where work already put in
+ * scores nothing.
+ */
+export function partialXp(
+  task: Pick<Task, 'timeBucket' | 'cognitiveLoad'>,
+  sprintsCompleted: number,
+  sprintsPlanned: number,
 ): number {
-  const raw = focusMinutes * 0.6 * DIFFICULTY[priority] * EXECUTION[status];
-  return Math.max(1, Math.round(raw));
-}
-
-/** Bonus for finishing the whole task, scaled by how big it was. */
-export function taskXp(task: Pick<Task, 'priority' | 'estimatedEffort'>): number {
-  const size = Math.min(task.estimatedEffort, 240) / 6;
-  return Math.round((20 + size) * DIFFICULTY[task.priority]);
-}
-
-/** Levels widen as they go, so early progress is visible and later levels earn. */
-export function levelFor(totalXp: number): number {
-  return Math.floor(Math.sqrt(Math.max(0, totalXp) / 40)) + 1;
-}
-
-export function xpForLevel(level: number): number {
-  return (level - 1) ** 2 * 40;
-}
-
-export function levelProgress(totalXp: number): { level: number; into: number; span: number; pct: number } {
-  const level = levelFor(totalXp);
-  const floor = xpForLevel(level);
-  const ceiling = xpForLevel(level + 1);
-  const span = ceiling - floor;
-  const into = totalXp - floor;
-  return { level, into, span, pct: span ? into / span : 0 };
+  if (sprintsPlanned <= 0 || sprintsCompleted <= 0) return 0;
+  const share = Math.min(1, sprintsCompleted / sprintsPlanned);
+  return Math.round(taskXp(task) * share);
 }
 
 /**
- * A day counts if you showed up — any focused time at all, however the sprint
- * ended. Requiring a *finished* sprint would make stopping early a failure,
- * which is the one thing the sprint loop promises it is not.
+ * What a sprint banks. A finished sprint is worth its share of the task; one cut
+ * short is worth the share of that sprint actually spent focused — showing up
+ * always pays something, so there is no ending worth nothing.
+ *
+ * `alreadyAwarded` caps the running total at the task's own worth: the task is
+ * worth what it is worth however many sprints it takes, and stopping early
+ * forfeits only the remainder.
  */
-export function isActiveDay(log: StatsLog | undefined): boolean {
-  if (!log) return false;
-  return log.focusMinutes > 0 || log.sprintsCompleted > 0 || log.tasksCompleted > 0;
-}
-
-/**
- * The anti-streak. A rolling count of active days in a window: miss a day and it
- * dips by one, it never resets to zero. Deliberately not a "don't break the
- * chain" counter — one bad week should not erase months.
- */
-export function consistency(logs: StatsLog[], windowDays: number, days: string[]): {
-  activeDays: number;
-  windowDays: number;
-  score: number;
-} {
-  const active = new Set(logs.filter(isActiveDay).map((l) => l.date));
-  const activeDays = days.filter((d) => active.has(d)).length;
-  return { activeDays, windowDays, score: Math.round((activeDays / windowDays) * 100) };
+export function sprintAward({
+  totalXp,
+  sprintsPlanned,
+  alreadyAwarded,
+  focusedMinutes,
+  plannedLength,
+  finished,
+}: {
+  totalXp: number;
+  sprintsPlanned: number;
+  alreadyAwarded: number;
+  focusedMinutes: number;
+  plannedLength: number;
+  finished: boolean;
+}): number {
+  const remaining = Math.max(0, totalXp - alreadyAwarded);
+  if (remaining === 0 || sprintsPlanned <= 0) return 0;
+  const perSprint = totalXp / sprintsPlanned;
+  const share = finished ? 1 : Math.min(1, plannedLength > 0 ? focusedMinutes / plannedLength : 0);
+  return Math.min(remaining, Math.round(perSprint * share));
 }

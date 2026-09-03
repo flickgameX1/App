@@ -1,109 +1,148 @@
-import type { Task } from '../db/types';
-import { horizonOrder } from '../lib/horizon';
-import { templateByKey } from '../lib/templates';
-import { daysUntil, dueLabel } from '../lib/time';
+import { useMemo, useState } from 'react';
+import type { Priority, Task } from '../db/types';
+import CalendarGrid from './CalendarGrid';
+import PaceBlock from './PaceBlock';
+import { PRIORITY_META } from './meta';
+import { addMonths, cursorFor, monthGrid, monthLabel, weekOf, type MonthCursor } from '../lib/calendar';
+import { sortForList } from '../lib/ordering';
+import { paceFor } from '../lib/pace';
+import { sprintsNeeded } from '../lib/buckets';
+import { dayKey, formatDuration } from '../lib/time';
 
-type GroupKey = 'past' | 'today' | 'tomorrow' | 'week' | 'later' | 'undated';
-
-const GROUP_LABELS: Record<GroupKey, string> = {
-  past: 'Past due',
-  today: 'Today',
-  tomorrow: 'Tomorrow',
-  week: 'This week',
-  later: 'Later',
-  undated: 'No date',
-};
-
-function groupOf(task: Task): GroupKey {
-  if (!task.deadline) return 'undated';
-  const days = daysUntil(task.deadline);
-  if (days < 0) return 'past';
-  if (days === 0) return 'today';
-  if (days === 1) return 'tomorrow';
-  if (days <= 7) return 'week';
-  return 'later';
-}
-
-/**
- * Plan is the only screen allowed to talk about schedule variance — "past due"
- * lives here and nowhere else, because the user came looking for it. V2 adds the
- * calendar, daily pace targets and ahead/behind status to this screen.
- */
 export default function PlanScreen({
   tasks,
-  done,
-  onPick,
-  onComplete,
+  sprintsDone,
+  onOpen,
 }: {
   tasks: Task[];
-  done: Task[];
-  onPick: (task: Task) => void;
-  onComplete: (task: Task) => void;
+  sprintsDone: Map<number, number>;
+  onOpen: (task: Task) => void;
 }) {
-  const groups = (Object.keys(GROUP_LABELS) as GroupKey[])
-    .map((key) => ({ key, items: horizonOrder(tasks.filter((t) => groupOf(t) === key)) }))
-    .filter((g) => g.items.length > 0);
+  const today = dayKey();
+  const [selected, setSelected] = useState(today);
+  const [cursor, setCursor] = useState<MonthCursor>(() => cursorFor(today));
+  // Week view is here for anyone who finds the month grid too wide to read.
+  const [view, setView] = useState<'month' | 'week'>('month');
 
-  const pastDue = tasks.filter((t) => groupOf(t) === 'past').length;
+  const byDay = useMemo(() => {
+    const map = new Map<string, Task[]>();
+    for (const task of tasks) {
+      if (task.deadline === undefined) continue;
+      const key = dayKey(task.deadline);
+      map.set(key, [...(map.get(key) ?? []), task]);
+    }
+    return map;
+  }, [tasks]);
+
+  const weeks = view === 'month' ? monthGrid(cursor) : [weekOf(selected)];
+  const agenda = sortForList(byDay.get(selected) ?? []);
+  const undated = tasks.filter((t) => t.deadline === undefined);
+
+  const paces = useMemo(
+    () =>
+      tasks
+        .map((task) => ({ task, pace: paceFor(task, sprintsDone.get(task.id!) ?? 0) }))
+        .filter((p): p is { task: Task; pace: NonNullable<typeof p.pace> } => p.pace !== null)
+        .sort((a, b) => a.task.deadline! - b.task.deadline!),
+    [tasks, sprintsDone],
+  );
+
+  const dotsFor = (date: string): Priority[] =>
+    sortForList(byDay.get(date) ?? []).map((t) => t.priority);
 
   return (
     <div className="pt-safe pb-8">
-      <header className="mb-5 px-5">
-        <h1 className="text-2xl font-semibold">Plan</h1>
-        <p className="mt-1 text-sm text-ink-3">
-          {tasks.length} active
-          {pastDue > 0 && ` · ${pastDue} past due`}
-        </p>
+      <header className="mb-3 flex items-center justify-between gap-2 px-5">
+        <div className="flex min-w-0 items-center gap-0.5">
+          <button
+            type="button"
+            onClick={() => setCursor((c) => addMonths(c, -1))}
+            aria-label="Previous month"
+            className="-ml-2 h-9 w-8 shrink-0 rounded-lg text-muted"
+          >
+            ‹
+          </button>
+          <h1 className="font-display text-base font-semibold tracking-tight whitespace-nowrap">
+            {monthLabel(cursor)}
+          </h1>
+          <button
+            type="button"
+            onClick={() => setCursor((c) => addMonths(c, 1))}
+            aria-label="Next month"
+            className="h-9 w-8 shrink-0 rounded-lg text-muted"
+          >
+            ›
+          </button>
+        </div>
+        <div className="flex shrink-0 rounded-lg border border-line p-0.5 text-xs">
+          {(['month', 'week'] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              aria-pressed={view === v}
+              className={`rounded-md px-2.5 py-1 ${view === v ? 'bg-surface text-text' : 'text-dim'}`}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
       </header>
 
-      {groups.length === 0 && (
-        <p className="px-5 text-sm text-ink-3">No active tasks. Add one from the Now screen.</p>
-      )}
+      <CalendarGrid
+        weeks={weeks}
+        cursor={view === 'month' ? cursor : null}
+        selected={selected}
+        today={today}
+        dotsFor={dotsFor}
+        onSelect={(date) => {
+          setSelected(date);
+          setCursor(cursorFor(date));
+        }}
+      />
 
-      {groups.map((group) => (
-        <section key={group.key} className="mb-6" aria-labelledby={`group-${group.key}`}>
-          <h2
-            id={`group-${group.key}`}
-            className="mb-2 flex items-center gap-2 px-5 text-sm font-medium text-ink-2"
-          >
-            {group.key === 'past' && <span className="h-1.5 w-1.5 rounded-full bg-ember" aria-hidden="true" />}
-            {GROUP_LABELS[group.key]}
-          </h2>
-          <ul className="px-5">
-            {group.items.map((task) => (
-              <li key={task.id} className="flex items-center gap-2 border-b border-line/60 last:border-0">
-                <button type="button" onClick={() => onPick(task)} className="flex-1 py-3 text-left">
-                  <span className="block text-sm text-ink">{task.title}</span>
-                  <span className="mt-0.5 block text-xs text-ink-3">
-                    {templateByKey(task.type).label}
-                    {task.deadline ? ` · ${dueLabel(task.deadline)}` : ''}
-                    {task.urgency === 3 ? ' · urgent' : ''}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onComplete(task)}
-                  aria-label={`Mark "${task.title}" done`}
-                  className="h-10 w-10 shrink-0 rounded-full border border-line text-ink-3"
-                >
-                  ✓
-                </button>
-              </li>
-            ))}
+      <section className="mt-6 px-5" aria-labelledby="agenda-heading">
+        <h2 id="agenda-heading" className="text-sm text-muted">
+          {selected === today ? 'Today' : new Date(selected).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
+        </h2>
+        {agenda.length === 0 ? (
+          <p className="mt-2 text-sm text-dim">
+            Nothing due.
+            {undated.length > 0 && ` ${undated.length} ${undated.length === 1 ? 'task has' : 'tasks have'} no date.`}
+          </p>
+        ) : (
+          <ul className="mt-2">
+            {agenda.map((task) => {
+              const planned = sprintsNeeded(task.estimatedMinutes, task.sprintLength);
+              const left = Math.max(0, planned - (sprintsDone.get(task.id!) ?? 0));
+              return (
+                <li key={task.id} className="relative border-b border-line/70 last:border-0">
+                  <span
+                    aria-hidden="true"
+                    className={`absolute top-3 bottom-3 left-0 w-[3px] rounded-full ${PRIORITY_META[task.priority].bar}`}
+                  />
+                  <button type="button" onClick={() => onOpen(task)} className="w-full py-3 pl-4 text-left">
+                    <span className="block text-sm">{task.title}</span>
+                    <span className="mt-0.5 block text-xs text-dim">
+                      {left} {left === 1 ? 'sprint' : 'sprints'} left · {formatDuration(task.estimatedMinutes)}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
-        </section>
-      ))}
+        )}
+      </section>
 
-      {done.length > 0 && (
-        <section className="px-5" aria-labelledby="group-done">
-          <h2 id="group-done" className="mb-2 text-sm font-medium text-ink-2">
-            Recently done
+      {paces.length > 0 && (
+        <section className="mt-7 px-5" aria-labelledby="pace-heading">
+          <h2 id="pace-heading" className="text-sm text-muted">
+            Pace
           </h2>
-          <ul className="text-sm text-ink-3">
-            {done.slice(0, 6).map((task) => (
-              <li key={task.id} className="border-b border-line/60 py-2.5 last:border-0">
-                {task.title}
-              </li>
+          <p className="mb-1 text-xs text-dim">What it takes from here</p>
+          <ul>
+            {paces.map(({ task, pace }) => (
+              <PaceBlock key={task.id} task={task} pace={pace} />
             ))}
           </ul>
         </section>

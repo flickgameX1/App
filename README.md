@@ -1,106 +1,236 @@
 # Sprint
 
-An ADHD task-sprint app. Pick a task, get it broken into steps, run a timed
-sprint, log it. Minimalist surface, powerful core — the cognitive load is meant
-to land on the app, not on you.
+An ADHD task-sprint app. Pick a task, choose what this sprint is actually for,
+run the timer, log it. Minimalist surface, powerful core — the cognitive load is
+meant to land on the app, not on you.
 
 Local-first PWA: React + Vite + Tailwind, IndexedDB via Dexie. No accounts, no
 login, no backend, works offline, installs to the home screen.
+
+## Build status
+
+Built in stages; each stage landed and was confirmed before the next started.
+All seven are in.
+
+| Stage | Scope | State |
+|---|---|---|
+| 0 | Scaffold: palette token system + the full Dexie data model | **done** |
+| 1 | Now list view + task creation flow | **done** |
+| 2 | Focus view: steps, sprint goal, progress | **done** |
+| 3 | Active sprint + completion screen (closes the core loop) | **done** |
+| 4 | Gamification header: level ring, XP, momentum, daily quest | **done** |
+| 5 | Stats page | **done** |
+| 6 | Plan calendar | **done** |
+| 7 | Polish: palette switcher, milestone badges, animation | **done** |
+
+## Where your data lives
+
+Everything is in this browser's IndexedDB — written the moment anything happens,
+so nothing needs to stay open and a sprint keeps correct time across a close and
+reopen. Nothing is on a server, which means:
+
+- **It is per browser and per device.** Two browsers means two task lists.
+- **The app asks the browser to keep it** (`navigator.storage.persist()`) on
+  every boot. Settings reports whether that was granted.
+- **On iOS, install it to the home screen.** Safari drops script-writable
+  storage for sites you have not installed after seven days of not visiting.
+- **Back it up.** Settings → Export a copy writes a JSON file; Restore replaces
+  everything from one. That file is the only safety net there is, and the only
+  way to move your history to another device.
+
+## Deploying it
+
+Pushing to `main` builds and publishes to GitHub Pages via
+`.github/workflows/deploy.yml`. It needs Pages enabled once, with **Settings →
+Pages → Source: GitHub Actions**. The workflow sets the base path from the repo
+name, so the bundle, the manifest and the service worker all resolve under
+`/<repo>/`.
 
 ## Running it
 
 ```bash
 npm install
 npm run dev        # dev server
-npm test           # pure-logic tests (matching, sprint sizing, XP, ordering)
+npm test           # data layer, derived fields, palettes, breakdown matching
 npm run build      # typecheck + production build, service worker included
 npm run preview    # serve the built app
-npm run icons      # regenerate the launcher PNGs from scripts/generate-icons.mjs
+npm run icons      # regenerate the launcher PNGs
 ```
 
-## The core loop
+## Palette tokens
 
-1. **Pick a task** — free-form, any task, any time. Nothing forces an order.
-2. **Get a breakdown** — steps suggested from the task's type.
-3. **Start a sprint** — a length is suggested from the task's type and weight,
-   and is always editable.
-4. **The sprint ends, or you stop it** — never a fail state. Stopping asks
-   "resume later, or done for now?" and both answers keep the time you did.
-5. **It's logged** — feeding XP, the consistency score and the trend charts.
+Every colour in the UI derives from the active palette; nothing hardcodes a hex.
+Token values live in `src/index.css` under `[data-palette='…']` blocks, the
+registry in `src/lib/palettes.ts`, and the active one is stamped on the root
+element from `Settings.activePaletteId` — so a theme change is one attribute.
 
-## Three screens
+Each palette defines `bg`, `surface`, `text`, `muted`, `dim`, `accent`, `reward`,
+`p1`/`p2`/`p3` and `line`. Four ship: **Ember** (default), **Neon**, **Forest**,
+and **Paper**, a light theme for light-sensitivity — switchable from the Now
+screen, and the choice persists.
 
-`Now` is the landing view; the planning layer is one tap away, not in your face.
+The theme block is `@theme inline`, which matters: without it Tailwind emits the
+`--color-*` variables on `:root`, where each `var()` resolves once and then
+inherits as a concrete colour — so a subtree stamped with its own
+`[data-palette]` would still paint the root's colours. Inlined, every utility
+resolves the palette variable at the element using it, which is what makes the
+theme picker's live swatches possible.
 
-- **Now** — the current task card (breakdown, sprint length, start) plus the
-  horizon strip.
-- **Plan** — every active task grouped by when it is due.
-- **Stats** — XP, level, consistency, and daily trend charts.
+`reward` is reserved for XP and levels and is never used decoratively. Priority
+owns the row colour (`p1`/`p2`/`p3`); cognitive load stays a neutral text chip,
+so one visual channel never carries two variables.
 
-### Two rules the code enforces
+## Data model
 
-**The horizon strip shows what is coming, never how far behind you are.** No
-"behind" count, no overdue badge, no red on the Now screen. Schedule variance
-lives in `PlanScreen` only, where the user went looking for it. A landing screen
-that opens with how far behind you are is a landing screen you stop opening —
-the exact failure this app exists to prevent.
+`src/db/types.ts`, all of it built at Stage 0 — including the fields no stage
+uses yet, since adding them later would mean migrating live user data.
 
-**No day-streak counter.** One missed day should not zero out months of
-progress. Instead there is a rolling consistency score — "active 5 of the last 7
-days" — that dips by one and never shatters. A day counts if you showed up at
-all: an abandoned sprint counts exactly like a finished one for consistency
-(it earns less XP, but it is never nothing).
+- `Task` — title, type, priority, cognitiveLoad, estimatedMinutes, timeBucket
+  (derived), sprintLength, deadline, status, timestamps
+- `Step` — its own row per task, with an explicit order; selectable in any order,
+  nothing locked behind an earlier step
+- `Breakdown` — a task type's personal step list, once the user has edited one
+- `Sprint` — goalText (free text), the stepIds it came from, planned/actual
+  length, status, timestamps, XP awarded
+- `StatsLog` — one row per day: tasks, sprints, XP, consistency window
+- `Progress` — level, totalXp, momentum, daily quest, badges
+- `Settings` — active palette, default sprint length
 
-## How the breakdown system works
+## XP
+
+Two axes, both fixed at creation. **Time bucket** (derived from the typed
+duration, never chosen) sets the base pool; **cognitive load** (user-selected)
+multiplies it. Sprint count plays no part — chunking a task into more sprints
+must not inflate its worth.
+
+| bucket | base | | load | × |
+|---|---|---|---|---|
+| under 30m | 20 | | easy | 1.0 |
+| 30m–1h | 45 | | moderate | 1.4 |
+| 1–3h | 100 | | challenging | 1.9 |
+| 3h+ | 220 | | impossible | 2.5 |
+
+So a short easy job is 20 XP and a long one you've been avoiding for months is
+550. Stopping a task part-way pays `total × (sprints done / sprints planned)` —
+the remainder is forfeited, the work already put in never is.
+
+## Plan
+
+A month grid as a density map with the agenda as the content. Cells carry
+priority-coloured dots, one per task due that day, so the shape of a week reads
+without processing any text; today is marked in the accent colour. Tapping a day
+fills the agenda below it. A month/week toggle sits in the header for anyone who
+finds the month grid too wide.
+
+**The pace block is the only place schedule variance appears** — and even here
+it is the target ahead, never the debt behind: "2 sprints a day hits Sep 11".
+Falling behind changes the number and turns it amber; it never produces a
+deficit count and never turns red. `warn` is its own palette token so it can be
+amber without borrowing from priority or from `reward`.
+
+### The horizon strip
+
+On the Now screen, below the list: a glanceable band of what's coming, sorted
+chronologically — priority still reads off the dot, but a top-priority task due
+in a fortnight is not what's coming next. It shows what's coming and nothing
+else. No counts, no badges, no amber, no variance of any kind; that lives in
+Plan, where the user chose to look at it.
+
+## Stats
+
+Total XP as the headline, then the consistency score — **active N of the last 7
+days**, a rolling count that dips by one and never shatters — then completions
+and focused time, then two charts:
+
+- **Total XP over the last 30 days.** A growth curve that starts at whatever was
+  earned before the window rather than restarting from zero, with a crosshair
+  and tooltip; one series, so the heading names it and no legend box is needed.
+- **XP by how hard it was.** Where the XP came from, across the four cognitive
+  load tiers. Bar length is the encoding and every bar wears the same hue: a
+  lightness ramp keyed to the tier would restate the ordering the labels already
+  carry, and its palest step drops under the contrast floor on the light theme.
+
+A **Show numbers** toggle exposes the same data as a table, so nothing is gated
+behind reading a chart. Chart colours are palette tokens, so both charts follow
+the active theme; the reward hue clears 3:1 on every palette's surface.
+
+## The gamification layer
+
+Sits above the task list: a level ring with the level number inside, the level's
+title, an XP bar to the next level, momentum, and the daily quest.
+
+**Every mechanic is additive.** XP and levels only climb. **Momentum** replaces
+the streak — an active day adds one, a missed day costs one, and today is never
+counted as missed because the day isn't over. Missing Tuesday costs a day, not
+the history. The **daily quest** resets nightly to a fresh target rather than
+recording a loss; hitting the target is a win, and hitting one still counts as
+showing up. There is no losable currency, no decay to zero, no broken-streak
+screen. The moment an app can punish you, opening it becomes risky and avoidance
+wins.
+
+Levels widen as they climb — 175 XP to level 2, then 225, then 275 — and each
+carries a name, because "steady builder" is something to be where "level 4" is
+only something to have.
+
+**Milestone badges** mark things that actually happened — a first finished task,
+a task you'd marked impossible, ten sprints, a three-hour haul. They are
+appended and permanent: a snapshot that no longer qualifies never takes one
+back. Newly earned ones are named in the payoff screen, where the reward moment
+already is, and the full set lives on Stats.
+
+**Motion**: exactly two moments — the sprint ring filling and the XP counting up
+on completion. There is one CSS transition in the whole app, and the count-up
+respects `prefers-reduced-motion`. Everything else stays still.
+
+## The sprint loop
+
+Starting a sprint hands the screen over to the timer: the ring is the hero and
+the only motion the app signs with, the task title shrinks to a whisper, the
+goal is the only content, and XP, levels and stats are all hidden for the
+duration — during a sprint there is nothing to watch instead of working.
+
+Three ways out, none of them a failure: **Goal done**, **Pause**, and **Stop
+here**, which asks only whether you're resuming later or done for now. Every
+ending lands on the payoff screen, where the XP counts up and you're asked
+whether the goal got done — "not yet" leaves the step available and costs
+nothing.
+
+A finished sprint banks its share of the task's XP; one cut short banks the
+share of that sprint actually spent focused, so showing up always pays
+something. The running total is capped at the task's own worth, and finishing
+the task pays out whatever the sprints left on the table — so the XP earned
+lands exactly on what the task was worth, and stopping early forfeits only the
+remainder.
+
+The clock reads off the wall clock, so locking the phone, backgrounding the app
+or reloading mid-sprint all leave the timer where it should be. Only one sprint
+can run at a time: one left running by another tab is closed out as stopped
+rather than orphaned, keeping the time it holds.
+
+## Sprint goals
+
+The app never walks you through a checklist. In the focus view the breakdown is
+a set of **options**: tap any of them, in any order, and the picked steps become
+the sprint's goal — a single line of free text you can rewrite entirely. Picking
+more steps takes the goal back over; typing your own keeps it until you do.
+Nothing is locked behind finishing an earlier step, because the piece you can
+actually face right now often isn't the next one in sequence.
+
+## The breakdown system
 
 No AI, no network. `src/lib/templates.ts` holds starter breakdowns for common
 task types. `src/lib/matching.ts` normalises a free-form title, folds synonyms
 ("tidy" → "clean", "bedroom" → "room"), and scores it against every template's
 aliases with token coverage plus character-bigram similarity — so "tidy bedroom"
 and "clean my room" land on the same steps, and anything unrecognised falls back
-to a generic breakdown rather than guessing.
-
-When you edit a suggested breakdown, your version is saved against that *task
-type* and used instead of the generic template from then on. The library grows
-into yours. (Edits to the generic fallback are not remembered — those steps
-belong to one unmatched task, not to every unmatched task.)
-
-AI assistance for genuinely novel tasks is a later add-on, not a dependency.
-
-## Data model
-
-`src/db/types.ts`, stored in IndexedDB:
-
-- `Task` — title, type, priority, urgency, deadline, estimatedEffort, status, steps
-- `Breakdown` — a task type's personal step list, once the user has edited one
-- `Sprint` — taskId, plannedLength, actualLength, status, timestamps, XP
-- `StatsLog` — one row per day: tasks completed, sprints completed, focus minutes, XP
-
-`deadline`, `urgency` and `estimatedEffort` are carried from day one even though
-V1 only sorts by them — V2's pacing engine needs them, and retrofitting fields
-means migrating stored data.
-
-## Phasing
-
-**V1 (this)** — the core loop, breakdown templates with personal memory, XP and
-consistency, and a deadline-sorted horizon strip with no pacing maths.
-
-**V2** — the priority/urgency pacing engine: a suggested daily pace toward each
-deadline, a calendar in Plan, ahead/behind status (in Plan only), and a horizon
-strip enriched with the day's target.
+to a generic breakdown rather than guessing. Edited breakdowns are saved as the
+user's version of that task type.
 
 ## Layout
 
 ```
-src/
-  db/          Dexie schema, types, and every write the app makes
-  lib/         pure logic — templates, matching, sprint sizing, XP, time
-  components/  three screens, the sheets, and the charts
-tests/         node tests for everything in lib/
-scripts/       launcher icon generator
+src/db/          Dexie schema, the data model, first-run seed
+src/lib/         pure logic — palettes, buckets, templates, matching, time
+tests/           node tests for the data layer and everything in lib/
+scripts/         launcher icon generator
 ```
-
-Charts are hand-rolled SVG against a palette validated for contrast and
-colour-vision separation on this app's dark surface; each is a single series, so
-the heading names it and only the endpoint is labelled. `Show numbers` on the
-Stats screen exposes the same data as a table.

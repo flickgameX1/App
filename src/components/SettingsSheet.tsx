@@ -75,6 +75,7 @@ export default function SettingsSheet({
 }) {
   const [storage, setStorage] = useState<StorageState>('unknown');
   const [pending, setPending] = useState<Backup | null>(null);
+  const [exported, setExported] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -84,9 +85,17 @@ export default function SettingsSheet({
 
   const exportNow = async () => {
     setMessage(null);
-    const backup = await buildBackup();
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
+    setExported(JSON.stringify(await buildBackup(), null, 2));
+  };
+
+  /**
+   * Saving a file is blocked in some embedded contexts, so the text is always on
+   * screen to copy as well. A button that silently does nothing is worse than no
+   * button.
+   */
+  const downloadExport = () => {
+    if (!exported) return;
+    const url = URL.createObjectURL(new Blob([exported], { type: 'application/json' }));
     const link = document.createElement('a');
     link.href = url;
     link.download = backupFilename();
@@ -94,6 +103,16 @@ export default function SettingsSheet({
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+  };
+
+  const copyExport = async () => {
+    if (!exported) return;
+    try {
+      await navigator.clipboard.writeText(exported);
+      setMessage('Copied.');
+    } catch {
+      setMessage('Copying was blocked — select the text below instead.');
+    }
   };
 
   const chooseFile = async (file: File) => {
@@ -124,7 +143,45 @@ export default function SettingsSheet({
         move it to another device.
       </p>
 
-      {pending ? (
+      {exported ? (
+        <div className="rounded-xl border border-line p-3">
+          <p className="text-sm">Your backup, {(exported.length / 1024).toFixed(0)} KB.</p>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              onClick={downloadExport}
+              className="flex-1 rounded-lg border border-line py-2.5 text-sm"
+            >
+              Save as a file
+            </button>
+            <button
+              type="button"
+              onClick={copyExport}
+              className="flex-1 rounded-lg border border-line py-2.5 text-sm"
+            >
+              Copy the text
+            </button>
+          </div>
+          <textarea
+            readOnly
+            value={exported}
+            aria-label="Backup contents"
+            onFocus={(e) => e.currentTarget.select()}
+            className="mt-2 h-24 w-full resize-none rounded-lg border border-line bg-bg p-2 font-mono text-[10px] text-muted"
+          />
+          <p className="mt-1 text-xs text-dim">
+            If saving does nothing, this app is embedded somewhere that blocks downloads — copy the text
+            and keep it in a note instead.
+          </p>
+          <button
+            type="button"
+            onClick={() => setExported(null)}
+            className="mt-2 w-full py-2 text-sm text-dim"
+          >
+            Done
+          </button>
+        </div>
+      ) : pending ? (
         <div className="rounded-xl border border-warn p-3">
           <p className="text-sm">
             {(() => {

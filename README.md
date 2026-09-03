@@ -23,6 +23,29 @@ All seven are in.
 | 6 | Plan calendar | **done** |
 | 7 | Polish: palette switcher, milestone badges, animation | **done** |
 
+## Where your data lives
+
+Everything is in this browser's IndexedDB — written the moment anything happens,
+so nothing needs to stay open and a sprint keeps correct time across a close and
+reopen. Nothing is on a server, which means:
+
+- **It is per browser and per device.** Two browsers means two task lists.
+- **The app asks the browser to keep it** (`navigator.storage.persist()`) on
+  every boot. Settings reports whether that was granted.
+- **On iOS, install it to the home screen.** Safari drops script-writable
+  storage for sites you have not installed after seven days of not visiting.
+- **Back it up.** Settings → Export a copy writes a JSON file; Restore replaces
+  everything from one. That file is the only safety net there is, and the only
+  way to move your history to another device.
+
+## Deploying it
+
+Pushing to `main` builds and publishes to GitHub Pages via
+`.github/workflows/deploy.yml`. It needs Pages enabled once, with **Settings →
+Pages → Source: GitHub Actions**. The workflow sets the base path from the repo
+name, so the bundle, the manifest and the service worker all resolve under
+`/<repo>/`.
+
 ## Running it
 
 ```bash

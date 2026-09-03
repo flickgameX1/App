@@ -29,6 +29,7 @@ import { LEVEL_TITLES, levelFor, levelProgress, levelTitle, xpForLevel } from '.
 import { momentumFrom, questToday } from '../src/lib/momentum';
 import { cumulativeXp, totals, xpByLoad, xpEarnedOn } from '../src/lib/stats';
 import { BADGES, badgeById, newlyEarned, type BadgeSnapshot } from '../src/lib/badges';
+import { BACKUP_VERSION, backupFilename, buildBackup, parseBackup, restoreBackup, summarise } from '../src/lib/backup';
 import { daysBetween } from '../src/lib/time';
 import { paceFor, pacePlan } from '../src/lib/pace';
 import { addMonths, cursorFor, isInMonth, monthGrid, weekOf } from '../src/lib/calendar';
@@ -626,6 +627,44 @@ check('time: due today', dueLabel(noon, noon), 'Today');
 check('time: a past deadline is stated plainly', dueLabel(noon - day, noon), 'Yesterday');
 check('time: clock format', formatClock(65_000), '1:05');
 check('time: durations read as words', [formatDuration(45), formatDuration(90)], ['45m', '1h 30m']);
+
+
+// --- backup: the only safety net there is ---------------------------------------
+const exported = await buildBackup();
+check('backup: it names itself', [exported.app, exported.version], ['sprint', BACKUP_VERSION]);
+ok('backup: it carries the tasks', exported.tasks.length > 0);
+ok('backup: and the steps under them', exported.steps.length > 0);
+ok('backup: and the day log', exported.statsLogs.length > 0);
+ok('backup: and the single progress and settings rows', exported.progress.length === 1 && exported.settings.length === 1);
+check('backup: the filename is dated', backupFilename(new Date(2026, 8, 4)), 'sprint-backup-2026-09-04.json');
+
+const roundTripped = parseBackup(JSON.stringify(exported));
+check('backup: a file we wrote reads back', summarise(roundTripped), summarise(exported));
+
+const rejects = (label: string, text: string) => {
+  try {
+    parseBackup(text);
+    check(label, 'accepted', 'rejected');
+  } catch {
+    check(label, 'rejected', 'rejected');
+  }
+};
+rejects('backup: nonsense is refused', 'not json at all');
+rejects('backup: another app\'s file is refused', JSON.stringify({ app: 'something-else', version: 1 }));
+rejects('backup: a newer format is refused rather than half-read', JSON.stringify({ ...exported, version: BACKUP_VERSION + 1 }));
+rejects('backup: a file missing a table is refused', JSON.stringify({ ...exported, sprints: undefined }));
+
+// Restoring puts the same data back, and replaces whatever was there.
+const taskCountBefore = await db.tasks.count();
+await db.tasks.add({
+  title: 'Added after the export', type: 'general', priority: 'second', cognitiveLoad: 'easy',
+  estimatedMinutes: 10, timeBucket: 'under30', sprintLength: 25, status: 'active', createdAt: Date.now(),
+});
+check('backup: the extra task is really there first', await db.tasks.count(), taskCountBefore + 1);
+await restoreBackup(roundTripped);
+check('backup: restoring replaces rather than merges', await db.tasks.count(), taskCountBefore);
+check('backup: the day log comes back too', await db.statsLogs.count(), exported.statsLogs.length);
+check('backup: settings survive the round trip', (await db.settings.get(1))?.defaultSprintLength, 25);
 
 console.log(`\n${checks - failures}/${checks} checks passed`);
 if (failures) process.exit(1);

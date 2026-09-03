@@ -39,7 +39,7 @@ export default function NowScreen({
           <button
             type="button"
             onClick={onOpenTheme}
-            aria-label="Theme"
+            aria-label="Settings"
             className="flex h-7 w-7 items-center justify-center rounded-full border border-line"
           >
             <span aria-hidden="true" className="h-3 w-3 rounded-full bg-accent" />

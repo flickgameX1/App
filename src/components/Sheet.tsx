@@ -42,8 +42,15 @@ export default function Sheet({
         aria-label={title}
         className="relative mx-auto max-h-[90vh] w-full max-w-md overflow-y-auto rounded-t-3xl border-t border-line bg-surface px-5 pt-3 pb-safe"
       >
-        <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-line" />
-        <h2 className="mb-5 font-display text-xl font-semibold tracking-tight">{title}</h2>
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" />
+        {/* The backdrop closes the sheet, but a long one pushes it off screen —
+            so there is always a control you can reach. */}
+        <div className="mb-4 flex items-baseline justify-between gap-3">
+          <h2 className="font-display text-xl font-semibold tracking-tight">{title}</h2>
+          <button type="button" onClick={onClose} className="shrink-0 text-sm text-muted" data-no-autofocus>
+            Done
+          </button>
+        </div>
         {children}
       </div>
     </div>

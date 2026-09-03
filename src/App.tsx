@@ -16,6 +16,7 @@ import {
   type NewTaskInput,
 } from './db/actions';
 import { usePalette } from './lib/usePalette';
+import { requestPersistence } from './lib/persistence';
 import { DEFAULT_PALETTE_ID } from './lib/palettes';
 import NowScreen from './components/NowScreen';
 import NewTaskSheet from './components/NewTaskSheet';
@@ -23,7 +24,7 @@ import FocusView from './components/FocusView';
 import ActiveSprint from './components/ActiveSprint';
 import StatsScreen from './components/StatsScreen';
 import PlanScreen from './components/PlanScreen';
-import PaletteSheet from './components/PaletteSheet';
+import SettingsSheet from './components/SettingsSheet';
 import StopSheet from './components/StopSheet';
 import SprintDone, { type SprintResult } from './components/SprintDone';
 import { dayKey, lastNDays } from './lib/time';
@@ -66,6 +67,9 @@ export default function App() {
 
   useEffect(() => {
     void ensureSeeded();
+    // Ask the browser to keep this app's data rather than treating it as
+    // disposable cache. Nothing here is recoverable from a server.
+    void requestPersistence();
   }, []);
 
   usePalette(settings?.activePaletteId);
@@ -261,11 +265,11 @@ export default function App() {
         </ul>
       </nav>
 
-      <PaletteSheet
+      <SettingsSheet
         open={themeOpen}
-        active={settings?.activePaletteId ?? DEFAULT_PALETTE_ID}
+        activePalette={settings?.activePaletteId ?? DEFAULT_PALETTE_ID}
         onClose={() => setThemeOpen(false)}
-        onChoose={(id) => void setPalette(id)}
+        onChoosePalette={(id) => void setPalette(id)}
       />
       <NewTaskSheet
         open={adding}

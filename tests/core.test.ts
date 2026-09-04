@@ -86,7 +86,7 @@ for (const palette of PALETTES) {
 }
 ok('palette: a light theme ships for light-sensitivity', PALETTES.some((p) => p.scheme === 'light'));
 check('palette: unknown ids fall back rather than throwing', paletteById('nope').id, DEFAULT_PALETTE_ID);
-check('palette: the default exists', paletteById(DEFAULT_PALETTE_ID).name, 'Ember');
+check('palette: the default exists', paletteById(DEFAULT_PALETTE_ID).name, 'Blush');
 
 // --- the data layer ----------------------------------------------------------
 await ensureSeeded();

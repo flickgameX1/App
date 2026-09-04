@@ -13,13 +13,13 @@ export interface PaletteMeta {
 }
 
 export const PALETTES: PaletteMeta[] = [
-  { id: 'ember', name: 'Ember', scheme: 'dark', themeColor: '#18161C' },
-  { id: 'neon', name: 'Neon', scheme: 'dark', themeColor: '#0E1116' },
-  { id: 'forest', name: 'Forest', scheme: 'dark', themeColor: '#14181A' },
-  { id: 'paper', name: 'Paper', scheme: 'light', themeColor: '#F5F2EA' },
+  { id: 'blush', name: 'Blush', scheme: 'light', themeColor: '#FFE1ED' },
+  { id: 'mint', name: 'Mint', scheme: 'light', themeColor: '#D5EFE4' },
+  { id: 'lilac', name: 'Lilac', scheme: 'light', themeColor: '#DED0F9' },
+  { id: 'dusk', name: 'Dusk', scheme: 'dark', themeColor: '#241B31' },
 ];
 
-export const DEFAULT_PALETTE_ID = 'ember';
+export const DEFAULT_PALETTE_ID = 'blush';
 
 /** The tokens every palette must define. Asserted against index.css in tests. */
 export const PALETTE_TOKENS = [
@@ -29,6 +29,7 @@ export const PALETTE_TOKENS = [
   'muted',
   'dim',
   'accent',
+  'on-accent',
   'reward',
   'p1',
   'p2',

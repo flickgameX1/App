@@ -40,7 +40,7 @@ export default function NowScreen({
             type="button"
             onClick={onOpenTheme}
             aria-label="Settings"
-            className="flex h-7 w-7 items-center justify-center rounded-full border border-line"
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-line lg:hidden"
           >
             <span aria-hidden="true" className="h-3 w-3 rounded-full bg-accent" />
           </button>
@@ -66,7 +66,7 @@ export default function NowScreen({
           <button
             type="button"
             onClick={onNewTask}
-            className="mt-6 rounded-xl bg-accent px-6 py-3.5 text-base font-semibold text-bg active:opacity-85"
+            className="mt-6 rounded-xl bg-accent px-6 py-3.5 text-base font-semibold text-on-accent active:opacity-85"
           >
             Add a task
           </button>

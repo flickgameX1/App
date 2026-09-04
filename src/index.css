@@ -5,86 +5,98 @@
  * Every colour in the UI derives from these. Nothing downstream hardcodes a
  * hex, so switching themes is one attribute on the root element.
  *
- *   bg / surface  grounds        text / muted / dim  ink, three weights
- *   accent        primary action  reward             XP and levels, reserved —
- *                                                    never decorative
- *   p1 / p2 / p3  priority tiers (top / second / can wait)
- *   line          borders and tracks
+ *   bg / surface   grounds — on the light themes the page is the tinted one
+ *                  and cards sit lighter on top of it, which is what makes a
+ *                  theme read as a theme rather than as an accent swap
+ *   text / muted / dim   ink, three weights
+ *   accent         primary action     onAccent   ink that sits on an accent fill
+ *   reward         XP and levels, reserved — never decorative
+ *   p1 / p2 / p3   priority tiers (top / second / can wait)
+ *   warn           the pace block only. Never red, never a deficit.
+ *   line           borders and tracks
  *
- * Ember is the default, so it also answers to bare :root. The other blocks come
+ * Every pair here is contrast-checked: body ink clears 4.5:1 on both grounds,
+ * marks and large text clear 3:1, and button labels clear 4.5:1 on their fill.
+ * The four grounds are also held at least 5 OKLab dE apart from one another, so
+ * switching theme visibly changes the page rather than tinting it.
+ *
+ * Blush is the default, so it also answers to bare :root. The other blocks come
  * after it deliberately: they carry equal specificity, so source order is what
  * lets a chosen palette win.
  */
+
+/* Warm pink and mint. */
 :root,
-[data-palette='ember'] {
-  color-scheme: dark;
-  --pal-bg: #18161c;
-  --pal-surface: #211e27;
-  --pal-text: #f4eee9;
-  --pal-muted: #aba1b0;
-  --pal-dim: #736a7d;
-  --pal-accent: #ff5a3c;
-  --pal-reward: #ffc145;
-  --pal-p1: #ff5a3c;
-  --pal-p2: #ff9f45;
-  --pal-p3: #4ecdc4;
-  /* Heads-up, not alarm: the pace block only. Never red, never a deficit. */
-  --pal-warn: #e9a13b;
-  --pal-line: #332f3d;
-}
-
-[data-palette='neon'] {
-  color-scheme: dark;
-  --pal-bg: #0e1116;
-  --pal-surface: #171d26;
-  --pal-text: #edf2f8;
-  --pal-muted: #98a6b5;
-  --pal-dim: #61707f;
-  --pal-accent: #ff3d71;
-  --pal-reward: #ffd166;
-  --pal-p1: #ff3d71;
-  --pal-p2: #ffd166;
-  --pal-p3: #06d6a0;
-  /* Heads-up, not alarm: the pace block only. Never red, never a deficit. */
-  --pal-warn: #f0b429;
-  --pal-line: #26303d;
-}
-
-[data-palette='forest'] {
-  color-scheme: dark;
-  --pal-bg: #14181a;
-  --pal-surface: #1e2523;
-  --pal-text: #ecf1ee;
-  --pal-muted: #9aa8a2;
-  --pal-dim: #67766f;
-  --pal-accent: #e76f51;
-  --pal-reward: #e9c46a;
-  --pal-p1: #e76f51;
-  --pal-p2: #e9c46a;
-  --pal-p3: #2a9d8f;
-  /* Heads-up, not alarm: the pace block only. Never red, never a deficit. */
-  --pal-warn: #d99a3e;
-  --pal-line: #2c3733;
-}
-
-[data-palette='paper'] {
+[data-palette='blush'] {
   color-scheme: light;
-  --pal-bg: #f5f2ea;
-  --pal-surface: #eae4d8;
-  --pal-text: #2b2722;
-  --pal-muted: #6a6053;
-  --pal-dim: #7c7263;
-  --pal-accent: #c1362a;
-  /* Reward and the second priority tier are stepped darker than the other
-     palettes' equivalents: on cream, the lighter ambers land near 2:1 and a
-     priority bar you cannot see is a priority system that does not work. */
-  --pal-reward: #9a6a12;
-  --pal-p1: #d1495b;
-  --pal-p2: #b06e1f;
-  --pal-p3: #3e8c84;
-  /* Heads-up, not alarm: the pace block only. Never red, never a deficit. */
-  --pal-warn: #a85e10;
-  --pal-line: #dbd3c4;
+  --pal-bg: #ffe1ed;
+  --pal-surface: #fff6fa;
+  --pal-text: #43203a;
+  --pal-muted: #7d4c68;
+  --pal-dim: #9e7087;
+  --pal-accent: #d92f5e;
+  --pal-on-accent: #ffffff;
+  --pal-reward: #a8710f;
+  --pal-p1: #d92f5e;
+  --pal-p2: #bf6a12;
+  --pal-p3: #12857e;
+  --pal-warn: #a8650f;
+  --pal-line: #f5c3d8;
+}
+
+/* Cool green, the mint end of the same family. */
+[data-palette='mint'] {
+  color-scheme: light;
+  --pal-bg: #d5efe4;
+  --pal-surface: #f1fbf7;
+  --pal-text: #153229;
+  --pal-muted: #42715f;
+  --pal-dim: #5f8a79;
+  --pal-accent: #0b7660;
+  --pal-on-accent: #ffffff;
+  --pal-reward: #96700c;
+  --pal-p1: #c23b6a;
+  --pal-p2: #b0700f;
+  --pal-p3: #0b7660;
+  --pal-warn: #9c6a0e;
+  --pal-line: #b6e0cd;
+}
+
+/* Soft lavender. */
+[data-palette='lilac'] {
+  color-scheme: light;
+  --pal-bg: #ded0f9;
+  --pal-surface: #f7f3fe;
+  --pal-text: #2b2150;
+  --pal-muted: #5c4d8a;
+  --pal-dim: #7b6ca4;
+  --pal-accent: #6b46c9;
+  --pal-on-accent: #ffffff;
+  --pal-reward: #96690f;
+  --pal-p1: #c43a72;
+  --pal-p2: #a8690f;
+  --pal-p3: #12807f;
+  --pal-warn: #9c680e;
+  --pal-line: #c6b3ef;
+}
+
+/* The night theme — deep plum rather than a neutral near-black, so it belongs
+   to the same family as the other three instead of reading as "dark mode". */
+[data-palette='dusk'] {
+  color-scheme: dark;
+  --pal-bg: #241b31;
+  --pal-surface: #332742;
+  --pal-text: #f6edf7;
+  --pal-muted: #bda8c9;
+  --pal-dim: #8b7899;
+  --pal-accent: #ff8fb4;
+  --pal-on-accent: #241b31;
+  --pal-reward: #ffd07f;
+  --pal-p1: #ff8fb4;
+  --pal-p2: #ffbe7d;
+  --pal-p3: #72dfcd;
+  --pal-warn: #ffc98a;
+  --pal-line: #453751;
 }
 
 /*
@@ -104,6 +116,7 @@
   --color-muted: var(--pal-muted);
   --color-dim: var(--pal-dim);
   --color-accent: var(--pal-accent);
+  --color-on-accent: var(--pal-on-accent);
   --color-reward: var(--pal-reward);
   --color-p1: var(--pal-p1);
   --color-p2: var(--pal-p2);
@@ -111,10 +124,11 @@
   --color-warn: var(--pal-warn);
   --color-line: var(--pal-line);
 
-  /* Two clearly separate roles: a display face with character for headlines,
-     a clean sans for everything you actually operate. */
-  --font-display: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
-  --font-sans: 'IBM Plex Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* Two rounded, friendly faces: Fredoka carries the headings with real
+     character, Nunito does the work at small sizes where a display face would
+     stop being readable. */
+  --font-display: 'Fredoka', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
+  --font-sans: 'Nunito', ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, sans-serif;
 }
 
 html,

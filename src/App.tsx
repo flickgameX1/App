@@ -18,6 +18,8 @@ import {
 import { usePalette } from './lib/usePalette';
 import { requestPersistence } from './lib/persistence';
 import { DEFAULT_PALETTE_ID } from './lib/palettes';
+import { useMediaQuery, WIDE } from './lib/useMediaQuery';
+import SideRail, { RAIL_ICONS } from './components/SideRail';
 import NowScreen from './components/NowScreen';
 import NewTaskSheet from './components/NewTaskSheet';
 import FocusView from './components/FocusView';
@@ -32,7 +34,7 @@ import { momentumFrom } from './lib/momentum';
 
 type TabId = 'now' | 'plan' | 'stats';
 
-const TABS: { id: TabId; label: string; waitingFor?: string }[] = [
+const TABS: { id: TabId; label: string }[] = [
   { id: 'now', label: 'Now' },
   { id: 'plan', label: 'Plan' },
   { id: 'stats', label: 'Stats' },
@@ -40,6 +42,9 @@ const TABS: { id: TabId; label: string; waitingFor?: string }[] = [
 
 export default function App() {
   const [tab, setTab] = useState<TabId>('now');
+  // An iPad in landscape or a laptop gets two columns and a side rail; a phone
+  // keeps the single column the app was designed as.
+  const wide = useMediaQuery(WIDE);
   const [adding, setAdding] = useState(false);
   const [openTaskId, setOpenTaskId] = useState<number | null>(null);
   const [stopping, setStopping] = useState(false);
@@ -181,10 +186,10 @@ export default function App() {
       </div>
     );
   }
-  const placeholder = TABS.find((t) => t.id === tab)?.waitingFor;
 
-  // The focus view takes the whole screen: no list, no tabs, nothing else.
-  if (openTask) {
+  // On a phone the focus view takes the whole screen: no list, no tabs, nothing
+  // else. On a wide screen it sits in the right-hand pane instead.
+  if (openTask && !wide) {
     return (
       <div className="mx-auto h-full max-w-md">
         <FocusView
@@ -202,41 +207,105 @@ export default function App() {
     );
   }
 
+  const screens = {
+    now: (
+      <NowScreen
+        tasks={tasks}
+        sprintsDone={sprintsDone}
+        progress={progress}
+        momentum={momentum}
+        today={today}
+        onNewTask={() => setAdding(true)}
+        onOpen={(task) => setOpenTaskId(task.id ?? null)}
+        onOpenPlan={() => setTab('plan')}
+        onOpenTheme={() => setThemeOpen(true)}
+        onDelete={(task) => task.id && deleteTask(task.id)}
+      />
+    ),
+    plan: (
+      <PlanScreen
+        tasks={tasks}
+        sprintsDone={sprintsDone}
+        onOpen={(task) => setOpenTaskId(task.id ?? null)}
+      />
+    ),
+    stats: <StatsScreen logs={statsLogs} tasks={allTasks} sprints={allSprints} progress={progress} />,
+  };
+
+  const sheets = (
+    <>
+      <SettingsSheet
+        open={themeOpen}
+        activePalette={settings?.activePaletteId ?? DEFAULT_PALETTE_ID}
+        onClose={() => setThemeOpen(false)}
+        onChoosePalette={(id) => void setPalette(id)}
+      />
+      <NewTaskSheet
+        open={adding}
+        onClose={() => setAdding(false)}
+        defaultSprintLength={settings?.defaultSprintLength ?? 25}
+        onAdd={(input: NewTaskInput) => void createTask(input)}
+      />
+    </>
+  );
+
+  if (wide) {
+    return (
+      <div className="flex h-full">
+        <SideRail
+          tabs={[
+            { id: 'now', label: 'Now', icon: RAIL_ICONS.now },
+            { id: 'plan', label: 'Plan', icon: RAIL_ICONS.plan },
+            { id: 'stats', label: 'Stats', icon: RAIL_ICONS.stats },
+          ]}
+          active={tab}
+          onChange={(id) => setTab(id as TabId)}
+          onOpenSettings={() => setThemeOpen(true)}
+        />
+
+        <main className="flex min-w-0 flex-1">
+          {tab === 'now' ? (
+            <>
+              {/* Two panes: the list keeps its place while a task is open beside
+                  it, instead of being replaced by the focus view. */}
+              <div className="w-[400px] shrink-0 overflow-y-auto border-r border-line">
+                {screens.now}
+              </div>
+              <div className="min-w-0 flex-1 overflow-y-auto">
+                {openTask ? (
+                  <div className="mx-auto max-w-2xl">
+                    <FocusView
+                      task={openTask}
+                      steps={openSteps}
+                      sprintsDone={sprintsDone.get(openTask.id!) ?? 0}
+                      recentXp={recentXp}
+                      onBack={() => setOpenTaskId(null)}
+                      onSaveSteps={(texts) => void saveSteps(openTask.id!, texts)}
+                      onStart={(goalText, stepIds) =>
+                        void startSprint(openTask.id!, goalText, stepIds, openTask.sprintLength)
+                      }
+                    />
+                  </div>
+                ) : (
+                  <div className="flex h-full items-center justify-center px-8 text-center">
+                    <p className="text-sm text-dim">Pick a task to see its steps.</p>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="mx-auto w-full max-w-3xl overflow-y-auto">{screens[tab]}</div>
+          )}
+        </main>
+
+        {sheets}
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto flex h-full max-w-md flex-col">
-      <main className="flex flex-1 flex-col overflow-y-auto">
-        {tab === 'now' ? (
-          <NowScreen
-            tasks={tasks}
-            sprintsDone={sprintsDone}
-            progress={progress}
-            momentum={momentum}
-            today={today}
-            onNewTask={() => setAdding(true)}
-            onOpen={(task) => setOpenTaskId(task.id ?? null)}
-            onOpenPlan={() => setTab('plan')}
-            onOpenTheme={() => setThemeOpen(true)}
-            onDelete={(task) => task.id && deleteTask(task.id)}
-          />
-        ) : tab === 'plan' ? (
-          <PlanScreen
-            tasks={tasks}
-            sprintsDone={sprintsDone}
-            onOpen={(task) => setOpenTaskId(task.id ?? null)}
-          />
-        ) : tab === 'stats' ? (
-          <StatsScreen logs={statsLogs} tasks={allTasks} sprints={allSprints} progress={progress} />
-        ) : (
-          <div className="flex flex-1 flex-col px-5 pt-safe">
-            <h1 className="font-display text-2xl font-semibold tracking-tight">
-              {TABS.find((t) => t.id === tab)?.label}
-            </h1>
-            <div className="flex flex-1 items-center justify-center">
-              <p className="text-sm text-dim">{placeholder}</p>
-            </div>
-          </div>
-        )}
-      </main>
+      <main className="flex flex-1 flex-col overflow-y-auto">{screens[tab]}</main>
 
       <nav className="border-t border-line pb-safe">
         <ul className="flex">
@@ -265,18 +334,7 @@ export default function App() {
         </ul>
       </nav>
 
-      <SettingsSheet
-        open={themeOpen}
-        activePalette={settings?.activePaletteId ?? DEFAULT_PALETTE_ID}
-        onClose={() => setThemeOpen(false)}
-        onChoosePalette={(id) => void setPalette(id)}
-      />
-      <NewTaskSheet
-        open={adding}
-        onClose={() => setAdding(false)}
-        defaultSprintLength={settings?.defaultSprintLength ?? 25}
-        onAdd={(input: NewTaskInput) => void createTask(input)}
-      />
+      {sheets}
     </div>
   );
 }

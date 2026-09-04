@@ -3,8 +3,11 @@
 import { deflateSync } from 'node:zlib';
 import { writeFileSync, mkdirSync } from 'node:fs';
 
-const BG = [0x2f, 0x6f, 0xe4];
-const FG = [0xff, 0xff, 0xff];
+// Sampled from the reference artwork: a raspberry red in the same family as
+// Apple Music's and Airbnb's marks — saturated enough to hold its own in a
+// home-screen grid without going orange.
+const BG = [0xd9, 0x2f, 0x5e];
+const FG = [0xff, 0xf7, 0xfa];
 
 const crcTable = Array.from({ length: 256 }, (_, n) => {
   let c = n;
@@ -44,34 +47,49 @@ const png = (size, rgba) => {
   ]);
 };
 
-// The mark: a play triangle (start a sprint) on a rounded square.
+// The mark: a lightning bolt, drawn as a stroked polyline the way the
+// reference is — a single unbroken line rather than a filled glyph. It reads as
+// speed at any size, which a letterform would not once it is 60px on a phone.
 const draw = (size, { radius, inset }) => {
   const buf = Buffer.alloc(size * size * 4);
-  const S = 3; // supersampling factor
+  const S = 4; // supersampling factor
   const box = { x0: size * inset, y0: size * inset, x1: size * (1 - inset), y1: size * (1 - inset) };
   const r = radius * (box.x1 - box.x0);
-  const side = (box.y1 - box.y0) * 0.30;
-  // Optically centre the triangle: its bounding box runs -0.62..+0.78 of `side`.
-  const cx = (box.x0 + box.x1) / 2 - side * 0.08;
-  const cy = (box.y0 + box.y1) / 2;
-  const tri = [
-    [cx - side * 0.62, cy - side],
-    [cx - side * 0.62, cy + side],
-    [cx + side * 0.78, cy],
-  ];
-  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
-  const inTriangle = (px, py) => {
-    const c1 = cross(tri[0], tri[1], [px, py]);
-    const c2 = cross(tri[1], tri[2], [px, py]);
-    const c3 = cross(tri[2], tri[0], [px, py]);
-    return (c1 >= 0 && c2 >= 0 && c3 >= 0) || (c1 <= 0 && c2 <= 0 && c3 <= 0);
+  const span = box.x1 - box.x0;
+
+  // Bolt path in 0..1 space, centred, then scaled into the safe box.
+  const pts = [
+    [0.67, 0.12],
+    [0.33, 0.51],
+    [0.53, 0.51],
+    [0.35, 0.88],
+  ].map(([x, y]) => [box.x0 + x * span, box.y0 + y * span]);
+  const stroke = span * 0.055;
+
+  const distToSegment = (px, py, [ax, ay], [bx, by]) => {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2));
+    return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
   };
+
+  const onBolt = (px, py) => {
+    // Open polyline with round caps and joins, as the reference is drawn —
+    // closing it back to the start would cut a stray diagonal through the mark.
+    for (let i = 0; i < pts.length - 1; i++) {
+      if (distToSegment(px, py, pts[i], pts[i + 1]) <= stroke / 2) return true;
+    }
+    return false;
+  };
+
   const inRounded = (px, py) => {
     if (px < box.x0 || px > box.x1 || py < box.y0 || py > box.y1) return false;
     const qx = Math.min(Math.max(px, box.x0 + r), box.x1 - r);
     const qy = Math.min(Math.max(py, box.y0 + r), box.y1 - r);
     return (px - qx) ** 2 + (py - qy) ** 2 <= r * r;
   };
+
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       let bg = 0;
@@ -82,7 +100,7 @@ const draw = (size, { radius, inset }) => {
           const py = y + (sy + 0.5) / S;
           if (inRounded(px, py)) {
             bg++;
-            if (inTriangle(px, py)) fg++;
+            if (onBolt(px, py)) fg++;
           }
         }
       }

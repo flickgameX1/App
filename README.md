@@ -65,9 +65,16 @@ registry in `src/lib/palettes.ts`, and the active one is stamped on the root
 element from `Settings.activePaletteId` — so a theme change is one attribute.
 
 Each palette defines `bg`, `surface`, `text`, `muted`, `dim`, `accent`, `reward`,
-`p1`/`p2`/`p3` and `line`. Four ship: **Ember** (default), **Neon**, **Forest**,
-and **Paper**, a light theme for light-sensitivity — switchable from the Now
-screen, and the choice persists.
+`p1`/`p2`/`p3` and `line`. Four ship: **Blush** (warm pink, default), **Mint**
+(cool green), **Lilac** (lavender) and **Dusk** (a deep plum night theme) —
+switchable from Settings, and the choice persists.
+
+These are whole themes rather than accent swaps: each one repaints the page
+ground, the ink and every mark. On the light themes the page is the tinted one
+and cards sit lighter on top of it. Every pair is contrast-checked — body ink
+clears 4.5:1 on both grounds, marks and large text clear 3:1, button labels
+clear 4.5:1 on their fill — and the four grounds are held at least 5 OKLab dE
+apart from each other, so switching theme visibly changes the page.
 
 The theme block is `@theme inline`, which matters: without it Tailwind emits the
 `--color-*` variables on `:root`, where each `var()` resolves once and then
@@ -225,6 +232,15 @@ aliases with token coverage plus character-bigram similarity — so "tidy bedroo
 and "clean my room" land on the same steps, and anything unrecognised falls back
 to a generic breakdown rather than guessing. Edited breakdowns are saved as the
 user's version of that task type.
+
+## Screen sizes
+
+Below 1024px the app is the single phone column it was designed as, with the
+bottom tab bar. At 1024px and up — an iPad in landscape, or any laptop — it
+switches by itself: navigation moves to a side rail, and the Now screen becomes
+two panes so the task list stays put while a task is open beside it. A running
+sprint stays full-bleed and immersive at every width, because that screen is
+supposed to be the only thing in front of you.
 
 ## Layout
 

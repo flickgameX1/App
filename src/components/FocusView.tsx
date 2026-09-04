@@ -73,7 +73,13 @@ export default function FocusView({
 
   return (
     <div className="flex h-full flex-col overflow-y-auto px-5 pt-safe pb-safe">
-      <button type="button" onClick={onBack} className="-ml-1 self-start py-1 text-sm text-muted">
+      {/* On a wide screen the list is already beside this pane, so there is
+          nothing to go back to. */}
+      <button
+        type="button"
+        onClick={onBack}
+        className="-ml-1 self-start py-1 text-sm text-muted lg:hidden"
+      >
         ← Back
       </button>
 
@@ -220,7 +226,7 @@ export default function FocusView({
         <button
           type="button"
           onClick={() => onStart(goal, selected)}
-          className="w-full rounded-xl bg-accent py-4 text-base font-semibold text-bg active:opacity-85"
+          className="w-full rounded-xl bg-accent py-4 text-base font-semibold text-on-accent active:opacity-85"
         >
           Start {task.sprintLength} min sprint
         </button>

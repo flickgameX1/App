@@ -100,7 +100,7 @@ export default function SprintDone({
         <button
           type="button"
           onClick={onBack}
-          className="w-full rounded-xl bg-accent py-4 text-base font-semibold text-bg active:opacity-85"
+          className="w-full rounded-xl bg-accent py-4 text-base font-semibold text-on-accent active:opacity-85"
         >
           Back to the list
         </button>
@@ -109,7 +109,7 @@ export default function SprintDone({
           <button
             type="button"
             onClick={onAnother}
-            className="w-full rounded-xl bg-accent py-4 text-base font-semibold text-bg active:opacity-85"
+            className="w-full rounded-xl bg-accent py-4 text-base font-semibold text-on-accent active:opacity-85"
           >
             Another sprint
           </button>

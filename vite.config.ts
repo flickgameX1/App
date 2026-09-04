@@ -17,8 +17,8 @@ export default defineConfig({
         name: 'Sprint',
         short_name: 'Sprint',
         description: 'Pick a task, get a breakdown, run a sprint.',
-        theme_color: '#18161C',
-        background_color: '#18161C',
+        theme_color: '#FFE1ED',
+        background_color: '#FFE1ED',
         display: 'standalone',
         orientation: 'portrait',
         // Relative so the installed app works under a sub-path as well as root.

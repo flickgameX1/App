@@ -59,14 +59,15 @@ const draw = (size, { radius, inset }) => {
 
   // Bolt path in 0..1 space, centred, then scaled into the safe box.
   const pts = [
-    [0.66, 0.13],
-    [0.31, 0.52],
-    [0.52, 0.52],
-    [0.34, 0.87],
-    [0.69, 0.48],
-    [0.48, 0.48],
+    [0.68, 0.11],
+    [0.28, 0.53],
+    [0.53, 0.53],
+    [0.32, 0.89],
+    [0.72, 0.47],
+    [0.47, 0.47],
   ].map(([x, y]) => [box.x0 + x * span, box.y0 + y * span]);
-  const stroke = span * 0.055;
+  // Thinner line, so more of the ground shows through inside the triangles.
+  const stroke = span * 0.044;
 
   const distToSegment = (px, py, [ax, ay], [bx, by]) => {
     const dx = bx - ax;

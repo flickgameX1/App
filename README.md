@@ -87,6 +87,14 @@ theme picker's live swatches possible.
 owns the row colour (`p1`/`p2`/`p3`); cognitive load stays a neutral text chip,
 so one visual channel never carries two variables.
 
+The priority triad keeps the same three families in every theme — rose, orange,
+teal — so the code never has to be relearned when you switch. Only their tone
+and hue lean shift, toward each theme's own ground: Mint's "can wait" is a true
+green, Lilac's leans blue, Blush's stays warm. The triads are generated in
+OKLCH and checked for colour-vision separation rather than eyeballed; the first
+pass had rose and orange only 7 ΔE apart under deuteranopia, which is close to
+indistinguishable for a red-green colourblind reader.
+
 ## Data model
 
 `src/db/types.ts`, all of it built at Stage 0 — including the fields no stage

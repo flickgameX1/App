@@ -11,7 +11,14 @@
  *   text / muted / dim   ink, three weights
  *   accent         primary action     onAccent   ink that sits on an accent fill
  *   reward         XP and levels, reserved — never decorative
- *   p1 / p2 / p3   priority tiers (top / second / can wait)
+ *   p1 / p2 / p3   priority tiers (top / second / can wait). The three
+ *                  families — rose, orange, teal — stay the same in every
+ *                  theme so the code never has to be relearned; only their
+ *                  tone and hue lean shift to sit on each ground. Checked for
+ *                  colour-vision separation, not eyeballed: every pair clears
+ *                  the CVD floor, which the first pass did not (rose and amber
+ *                  were 7 apart under deuteranopia — near-identical to a
+ *                  red-green colourblind reader).
  *   warn           the pace block only. Never red, never a deficit.
  *   line           borders and tracks
  *
@@ -37,9 +44,9 @@
   --pal-accent: #d92f5e;
   --pal-on-accent: #ffffff;
   --pal-reward: #a8710f;
-  --pal-p1: #d92f5e;
-  --pal-p2: #bf6a12;
-  --pal-p3: #12857e;
+  --pal-p1: #bd1f3d;
+  --pal-p2: #d76b29;
+  --pal-p3: #00908d;
   --pal-warn: #a8650f;
   --pal-line: #f5c3d8;
 }
@@ -55,9 +62,9 @@
   --pal-accent: #0b7660;
   --pal-on-accent: #ffffff;
   --pal-reward: #96700c;
-  --pal-p1: #c23b6a;
-  --pal-p2: #b0700f;
-  --pal-p3: #0b7660;
+  --pal-p1: #ba1f1c;
+  --pal-p2: #cb7300;
+  --pal-p3: #008b5e;
   --pal-warn: #9c6a0e;
   --pal-line: #b6e0cd;
 }
@@ -73,9 +80,9 @@
   --pal-accent: #6b46c9;
   --pal-on-accent: #ffffff;
   --pal-reward: #96690f;
-  --pal-p1: #c43a72;
-  --pal-p2: #a8690f;
-  --pal-p3: #12807f;
+  --pal-p1: #bd145c;
+  --pal-p2: #d2700b;
+  --pal-p3: #008ca1;
   --pal-warn: #9c680e;
   --pal-line: #c6b3ef;
 }
@@ -92,9 +99,9 @@
   --pal-accent: #ff8fb4;
   --pal-on-accent: #241b31;
   --pal-reward: #ffd07f;
-  --pal-p1: #ff8fb4;
-  --pal-p2: #ffbe7d;
-  --pal-p3: #72dfcd;
+  --pal-p1: #d25186;
+  --pal-p2: #cf7c00;
+  --pal-p3: #009a8d;
   --pal-warn: #ffc98a;
   --pal-line: #453751;
 }

@@ -47,9 +47,9 @@ const png = (size, rgba) => {
   ]);
 };
 
-// The mark: a lightning bolt, drawn as a stroked polyline the way the
-// reference is — a single unbroken line rather than a filled glyph. It reads as
-// speed at any size, which a letterform would not once it is 60px on a phone.
+// The mark: a lightning bolt as a closed stroked outline, which reads as two
+// triangles meeting in the middle. It holds a silhouette at 60px on a home
+// screen, which a letterform would not.
 const draw = (size, { radius, inset }) => {
   const buf = Buffer.alloc(size * size * 4);
   const S = 4; // supersampling factor
@@ -59,10 +59,12 @@ const draw = (size, { radius, inset }) => {
 
   // Bolt path in 0..1 space, centred, then scaled into the safe box.
   const pts = [
-    [0.67, 0.12],
-    [0.33, 0.51],
-    [0.53, 0.51],
-    [0.35, 0.88],
+    [0.66, 0.13],
+    [0.31, 0.52],
+    [0.52, 0.52],
+    [0.34, 0.87],
+    [0.69, 0.48],
+    [0.48, 0.48],
   ].map(([x, y]) => [box.x0 + x * span, box.y0 + y * span]);
   const stroke = span * 0.055;
 
@@ -75,10 +77,10 @@ const draw = (size, { radius, inset }) => {
   };
 
   const onBolt = (px, py) => {
-    // Open polyline with round caps and joins, as the reference is drawn —
-    // closing it back to the start would cut a stray diagonal through the mark.
-    for (let i = 0; i < pts.length - 1; i++) {
-      if (distToSegment(px, py, pts[i], pts[i + 1]) <= stroke / 2) return true;
+    // Closed polyline: the return edge is what splits the bolt into the two
+    // triangles that meet in the middle, which is the shape we want.
+    for (let i = 0; i < pts.length; i++) {
+      if (distToSegment(px, py, pts[i], pts[(i + 1) % pts.length]) <= stroke / 2) return true;
     }
     return false;
   };
